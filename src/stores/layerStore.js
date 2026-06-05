@@ -54,6 +54,7 @@ export const LAYERS = [
     label: 'Fotos Eje de Vías',
     file: 'https://services5.arcgis.com/K90UQIB09TmTjUL8/arcgis/rest/services/Foto/FeatureServer/0/query?where=1%3D1&outFields=*&f=geojson',
     type: 'cluster',
+    paginate: true,
     iconImage: 'foto-vias-icon',
     iconSize: 0.65,
     clusterColor: '#8b5cf6',

@@ -34,10 +34,39 @@ function _loadSvgImage(map, name) {
   })
 }
 
+// Fetch a single page from an ArcGIS GeoJSON endpoint with resultOffset pagination
+async function _fetchArcGISPage(baseUrl, offset, pageSize) {
+  const url = `${baseUrl}&resultOffset=${offset}&resultRecordCount=${pageSize}`
+  const res = await fetch(url)
+  const data = await res.json()
+  return data.features || []
+}
+
 export function useLayers() {
   const mapStore = useMapStore()
   const layerStore = useLayerStore()
   const coordStore = useCoordStore()
+
+  // Loads additional pages in the background and incrementally updates the map source
+  async function _loadMorePages(map, layer, allFeatures, offset) {
+    const PAGE = 2000
+    while (true) {
+      try {
+        const page = await _fetchArcGISPage(layer.file, offset, PAGE)
+        if (!page.length) break
+        allFeatures.push(...page)
+        const updated = markRaw({ type: 'FeatureCollection', features: allFeatures })
+        layerStore._cache[layer.id] = updated
+        const src = map.getSource(layer.id)
+        if (src) src.setData(updated)
+        if (page.length < PAGE) break
+        offset += PAGE
+      } catch (err) {
+        console.warn('[useLayers] Pagination error for', layer.id, err)
+        break
+      }
+    }
+  }
 
   async function loadAllLayers() {
     const map = mapStore.instance
@@ -51,8 +80,22 @@ export function useLayers() {
   async function _loadLayer(map, layer) {
     try {
       if (!layerStore._cache[layer.id]) {
-        const res = await fetch(layer.file)
-        layerStore._cache[layer.id] = markRaw(await res.json())
+        if (layer.paginate) {
+          // Load first page synchronously so the map shows data immediately,
+          // then stream remaining pages in the background.
+          const PAGE = 2000
+          const firstPage = await _fetchArcGISPage(layer.file, 0, PAGE)
+          const allFeatures = [...firstPage]
+          layerStore._cache[layer.id] = markRaw({ type: 'FeatureCollection', features: allFeatures })
+
+          if (firstPage.length >= PAGE) {
+            // Fire and forget — updates source progressively as more pages arrive
+            _loadMorePages(map, layer, allFeatures, PAGE).catch(() => {})
+          }
+        } else {
+          const res = await fetch(layer.file)
+          layerStore._cache[layer.id] = markRaw(await res.json())
+        }
       }
 
       const data = layerStore._cache[layer.id]
