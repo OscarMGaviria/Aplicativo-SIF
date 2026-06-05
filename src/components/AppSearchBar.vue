@@ -10,7 +10,7 @@
         ref="inputEl"
         v-model="term"
         class="sb-input"
-        placeholder="Buscar vía o código..."
+        placeholder="Buscar vía, código o coordenadas..."
         autocomplete="off"
         spellcheck="false"
         @input="onInput"
@@ -66,7 +66,7 @@
             </svg>
           </span>
           <div class="sug-texts">
-            <span class="sug-codigo">Ir a coordenadas</span>
+            <span class="sug-codigo">Vía más cercana a</span>
             <span class="sug-nombre">{{ term }}</span>
           </div>
           <span class="sug-enter-indicator">
@@ -88,6 +88,7 @@
 import { ref, computed } from 'vue'
 import { useQuery } from '../composables/useQuery'
 import { useMapStore } from '../stores/mapStore'
+import { flyToAntioquia } from '../composables/useMap'
 
 const { searchRoads, queryByRoad, queryByCoords, clearResults } = useQuery()
 const mapStore = useMapStore()
@@ -99,9 +100,84 @@ const curIdx    = ref(-1)
 const focused   = ref(false)
 const searched  = ref(false)   // true after a search was submitted (no suggestions yet)
 
-const COORD_RE = /^(-?\d{1,3}(?:\.\d+)?)[,\s]+(-?\d{1,3}(?:\.\d+)?)$/
+// Parse coordinates in decimal degrees or DMS (Degrees, Minutes, Seconds).
+// Handles formats: "6.5, -75.4" | "6°30'N 75°24'W" | "N6°30' W75°24'" | "6 30 0 N 75 24 0 W"
+function parseCoords(text) {
+  if (!text) return null
+  const str = text.trim()
+  if (str.length < 3) return null
 
-const coordMatch = computed(() => COORD_RE.test(term.value.trim()))
+  // Reject if any non-coordinate character is present
+  if (/[^\d\s°ºd''"″′,;:\-+.NSEWnsew]/.test(str)) return null
+
+  // Parse one coordinate component. Handles hemisphere-first (N6°30') and hemisphere-last (6°30'N).
+  function parseOne(s) {
+    s = s.trim()
+    if (!s) return null
+    const m = s.match(
+      /^([NSEWnsew])?\s*(-?\d+(?:\.\d+)?)\s*[°ºd]?\s*(?:(\d+(?:\.\d+)?)\s*['′]?\s*(?:(\d+(?:\.\d+)?)\s*["″]?)?)?\s*([NSEWnsew])?$/i
+    )
+    if (!m) return null
+    const h1 = m[1]?.toUpperCase()
+    const h2 = m[5]?.toUpperCase()
+    const isLat = h => h === 'N' || h === 'S'
+    const isLng = h => h === 'E' || h === 'W'
+    // Reject parts that contain both a lat and a lng hemisphere (parsing artifact)
+    if (h1 && h2 && ((isLat(h1) && isLng(h2)) || (isLng(h1) && isLat(h2)))) return null
+    const hemi = h1 || h2 || null
+    const deg = parseFloat(m[2])
+    const min = m[3] ? parseFloat(m[3]) : 0
+    const sec = m[4] ? parseFloat(m[4]) : 0
+    if (isNaN(deg)) return null
+    let val = Math.abs(deg) + min / 60 + sec / 3600
+    if (deg < 0 || ['S', 'W'].includes(hemi)) val = -val
+    return { val, hemi }
+  }
+
+  function assignLatLng(p1, p2) {
+    let lat, lng
+    const h1 = p1.hemi, h2 = p2.hemi
+    const isLat = h => h === 'N' || h === 'S'
+    const isLng = h => h === 'E' || h === 'W'
+    if (isLat(h1))      { lat = p1.val; lng = p2.val }
+    else if (isLng(h1)) { lng = p1.val; lat = p2.val }
+    else if (isLat(h2)) { lat = p2.val; lng = p1.val }
+    else if (isLng(h2)) { lng = p2.val; lat = p1.val }
+    else {
+      // No hemisphere hints: use Colombia longitude range heuristic
+      const a1 = Math.abs(p1.val), a2 = Math.abs(p2.val)
+      if (a1 > 70 && a1 < 85) { lng = p1.val; lat = p2.val }
+      else if (a2 > 70 && a2 < 85) { lat = p1.val; lng = p2.val }
+      else { lat = p1.val; lng = p2.val }
+    }
+    // Colombia: positive longitude in western range should be negative
+    if (lng > 0 && lng < 85) lng = -lng
+    // Validate against Colombia geographic bounds
+    if (lat < -5 || lat > 15 || lng < -85 || lng > -60) return null
+    return { lat, lng }
+  }
+
+  // Strategy 1: split by comma or semicolon
+  const bySep = str.split(/[,;]/)
+  if (bySep.length === 2) {
+    const a = parseOne(bySep[0])
+    const b = parseOne(bySep[1])
+    if (a && b) return assignLatLng(a, b)
+  }
+
+  // Strategy 2: tokenize by whitespace and find the correct split point
+  const tokens = str.split(/\s+/)
+  for (let i = 1; i < tokens.length; i++) {
+    const a = parseOne(tokens.slice(0, i).join(' '))
+    const b = parseOne(tokens.slice(i).join(' '))
+    if (a && b) return assignLatLng(a, b)
+  }
+
+  return null
+}
+
+const parsedCoords = computed(() => parseCoords(term.value))
+const coordMatch = computed(() => !!parsedCoords.value)
 
 const showList = computed(() =>
   focused.value &&
@@ -159,11 +235,9 @@ function selectRoad(s) {
 }
 
 function execCoords() {
-  const m = term.value.trim().match(COORD_RE)
-  if (!m) return
-  const a = parseFloat(m[1]), b = parseFloat(m[2])
-  const [lat, lng] = Math.abs(a) <= 90 ? [a, b] : [b, a]
-  queryByCoords(lng, lat)
+  const coords = parsedCoords.value
+  if (!coords) return
+  queryByCoords(coords.lng, coords.lat)
   close()
 }
 
@@ -178,14 +252,7 @@ function clearAll() {
   clear()
   close()
   inputEl.value?.blur()
-  if (mapStore.instance) {
-    const isTerrain = mapStore.currentBaseMap === 'terrain3d'
-    mapStore.instance.flyTo({
-      center: isTerrain ? [-75.4, 6.5] : [-74.0, 4.5],
-      zoom: isTerrain ? 12 : 5.5,
-      pitch: 0
-    })
-  }
+  if (mapStore.instance) flyToAntioquia(mapStore.instance)
 }
 
 function onFocus() {

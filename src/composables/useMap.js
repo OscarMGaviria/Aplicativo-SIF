@@ -1,6 +1,17 @@
 import maplibregl from 'maplibre-gl'
 import { useMapStore } from '../stores/mapStore'
 
+const ANTIOQUIA_HOME = { center: [-75.367, 7.27], zoom: 7.63 }
+
+export function flyToAntioquia(map) {
+  map.flyTo({
+    ...ANTIOQUIA_HOME,
+    pitch: 0,
+    bearing: 0,
+    duration: 1200
+  })
+}
+
 export const BASE_MAPS = [
   {
     id: 'liberty',
@@ -32,11 +43,17 @@ export const BASE_MAPS = [
         },
         terrainSource: {
           type: 'raster-dem',
-          url: 'https://tiles.mapterhorn.com/tilejson.json'
+          tiles: ['https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png'],
+          encoding: 'terrarium',
+          tileSize: 256,
+          maxzoom: 15
         },
         hillshadeSource: {
           type: 'raster-dem',
-          url: 'https://tiles.mapterhorn.com/tilejson.json'
+          tiles: ['https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png'],
+          encoding: 'terrarium',
+          tileSize: 256,
+          maxzoom: 15
         }
       },
       layers: [
@@ -84,11 +101,10 @@ export function useMap() {
     const map = new maplibregl.Map({
       container,
       style: bm.style,
-      center: isTerrain ? [-75.4, 6.5] : [-74.0, 4.5],
-      zoom: isTerrain ? 12 : 5.5,
-      pitch: 0, // Always start flat (en planta)
+      center: ANTIOQUIA_HOME.center,
+      zoom: ANTIOQUIA_HOME.zoom,
+      pitch: 0,
       maxPitch: 85,
-      hash: true,
       attributionControl: false
     })
 
@@ -97,7 +113,10 @@ export function useMap() {
       if (!map.getSource('terrainSource')) {
         map.addSource('terrainSource', {
           type: 'raster-dem',
-          url: 'https://tiles.mapterhorn.com/tilejson.json'
+          tiles: ['https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png'],
+          encoding: 'terrarium',
+          tileSize: 256,
+          maxzoom: 15
         })
       }
     })
@@ -141,6 +160,10 @@ export function useMap() {
       new maplibregl.AttributionControl({ compact: true }),
       'bottom-right'
     )
+
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') flyToAntioquia(map)
+    })
 
     store.setInstance(map)
     window.map = map

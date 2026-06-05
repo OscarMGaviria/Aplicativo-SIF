@@ -105,8 +105,8 @@ export function useQuery() {
           'circle-color': [
             'match',
             ['get', 'type'],
-            'start', '#10b981', // Emerald green
-            'end', '#ef4444',   // Red
+            'start', '#10b981',
+            'end', '#ef4444',
             '#cccccc'
           ],
           'circle-stroke-width': 2.5,
@@ -114,23 +114,28 @@ export function useQuery() {
         }
       })
 
-      // Endpoints labels
-      map.addLayer({
-        id: 'query-endpoints-label',
-        type: 'symbol',
-        source: 'query-endpoints',
-        layout: {
-          'text-field': ['get', 'label'],
-          'text-size': 11,
-          'text-offset': [0, -1.6],
-          'text-anchor': 'bottom'
-        },
-        paint: {
-          'text-color': '#1e293b',
-          'text-halo-color': '#ffffff',
-          'text-halo-width': 2
-        }
-      })
+      try {
+        map.addLayer({
+          id: 'query-endpoints-label',
+          type: 'symbol',
+          source: 'query-endpoints',
+          layout: {
+            'text-field': ['get', 'label'],
+            'text-font': ['Open Sans Regular'],
+            'text-size': 11,
+            'text-offset': [0, -1.8],
+            'text-anchor': 'bottom'
+          },
+          paint: {
+            'text-color': '#1e293b',
+            'text-halo-color': '#ffffff',
+            'text-halo-width': 2
+          }
+        })
+      } catch (e) {
+        console.warn('[query] endpoint labels not available:', e)
+      }
+
     }
 
     if (!map.getSource('query-point')) {
@@ -142,6 +147,21 @@ export function useQuery() {
         paint: {
           'circle-radius': 7,
           'circle-color': '#ff5f1f',
+          'circle-stroke-width': 2.5,
+          'circle-stroke-color': '#ffffff'
+        }
+      })
+    }
+
+    if (!map.getSource('query-coord')) {
+      map.addSource('query-coord', { type: 'geojson', data: EMPTY_FC })
+      map.addLayer({
+        id: 'query-coord',
+        type: 'circle',
+        source: 'query-coord',
+        paint: {
+          'circle-radius': 6,
+          'circle-color': '#3d5af1',
           'circle-stroke-width': 2.5,
           'circle-stroke-color': '#ffffff'
         }
@@ -162,6 +182,7 @@ export function useQuery() {
     const map = mapStore.instance
     if (map?.getSource('query-line')) map.getSource('query-line').setData(EMPTY_FC)
     if (map?.getSource('query-point')) map.getSource('query-point').setData(EMPTY_FC)
+    if (map?.getSource('query-coord')) map.getSource('query-coord').setData(EMPTY_FC)
     if (map?.getSource('query-endpoints')) map.getSource('query-endpoints').setData(EMPTY_FC)
     _removeCanteraPopup()
     _removeRoadPopup()
@@ -193,6 +214,11 @@ export function useQuery() {
     if (src) src.setData(coords ? { type: 'FeatureCollection', features: [turf.point(coords)] } : EMPTY_FC)
   }
 
+  function _setCoordData(coords) {
+    const src = mapStore.instance?.getSource('query-coord')
+    if (src) src.setData(coords ? { type: 'FeatureCollection', features: [turf.point(coords)] } : EMPTY_FC)
+  }
+
   function _applyResultToMap(result) {
     if (!result) return
     if (result.chainedCoords) {
@@ -204,6 +230,8 @@ export function useQuery() {
     }
     if (result.snappedCoords) _setPointData(result.snappedCoords)
     else _setPointData(null)
+    if (result.coordPoint) _setCoordData(result.coordPoint)
+    else _setCoordData(null)
   }
 
   function searchRoads(term) {
@@ -289,15 +317,19 @@ export function useQuery() {
     const { codigo, nombre, competente, orden, chainedCoords, totalKm } = _buildRoad(best.feature, best.layerId)
     const abs = getAbscissaAtPoint(lng, lat, chainedCoords)
 
+    _setCoordData([lng, lat])
     _setLineData(chainedCoords)
     _setEndpointsData(chainedCoords)
     _setPointData(abs.snappedCoords)
-    mapStore.instance?.flyTo({ center: abs.snappedCoords, zoom: Math.max(mapStore.instance.getZoom(), 13) })
+
+    const bbox = turf.bbox(turf.featureCollection([turf.point([lng, lat]), turf.point(abs.snappedCoords)]))
+    mapStore.instance?.fitBounds(bbox, { padding: 100, maxZoom: 16, duration: 800 })
     if (mapStore.instance) _showRoadPopup(mapStore.instance, abs.snappedCoords, abs.formatted)
 
     queryStore.setResult({
       type: 'point', pk: abs.pk, formatted: abs.formatted,
       snappedCoords: abs.snappedCoords, distFromLine: abs.distFromLine,
+      coordPoint: [lng, lat],
       nombre, codigo, competente, orden, layerId: best.layerId, totalKm, chainedCoords
     })
   }
@@ -393,6 +425,8 @@ export function useQuery() {
 
         // Sin punto naranja para canteras — el ícono propio es suficiente
         _setLineData(null)
+        _setEndpointsData(null)
+        _setCoordData(null)
         _setPointData(null)
 
         // Tooltip con el nombre encima del ícono
