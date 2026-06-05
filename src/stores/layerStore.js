@@ -58,7 +58,7 @@ export const LAYERS = [
     iconImage: 'foto-vias-icon',
     iconSize: 0.65,
     clusterColor: '#8b5cf6',
-    clusterMaxZoom: 15,
+    clusterMaxZoom: 14,
     order: 5
   }
 ]

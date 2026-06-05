@@ -112,7 +112,7 @@ export function useLayers() {
             type: 'geojson', data,
             cluster: true,
             clusterMaxZoom: layer.clusterMaxZoom ?? 14,
-            clusterRadius: 50
+            clusterRadius: 40
           })
         }
         const clusterColor = layer.clusterColor || '#8b5cf6'
