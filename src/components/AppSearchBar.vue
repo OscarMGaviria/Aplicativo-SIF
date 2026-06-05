@@ -40,7 +40,7 @@
           @mousedown.prevent="selectRoad(s)"
         >
           <span class="sug-badge" :class="s.layerId">{{ layerShort(s.layerId) }}</span>
-          <div class="sug-texts">
+          <div class="sug-texts" :title="[s.codigo, s.nombre].filter(Boolean).join(' — ')">
             <span class="sug-codigo">{{ s.codigo || '—' }}</span>
             <span class="sug-nombre">{{ s.nombre }}</span>
           </div>
@@ -303,18 +303,17 @@ defineExpose({ focus: () => inputEl.value?.focus() })
   position: relative;
 }
 
+/* Input row — light theme matching ResultsPanel */
 .sb-row {
   display: flex;
   align-items: center;
   gap: 8px;
-  background: rgba(22, 22, 42, 0.85);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: #ffffff;
+  border: 1px solid #d8d8e8;
   border-radius: 12px;
   padding: 0 14px;
   height: 44px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
   transition: border-color 200ms cubic-bezier(0.23, 1, 0.32, 1),
               box-shadow 200ms cubic-bezier(0.23, 1, 0.32, 1),
               transform 200ms cubic-bezier(0.23, 1, 0.32, 1);
@@ -322,55 +321,51 @@ defineExpose({ focus: () => inputEl.value?.focus() })
 
 .sb-row.focused {
   border-color: #3d5af1;
-  box-shadow: 0 6px 24px rgba(61, 90, 241, 0.25);
+  box-shadow: 0 4px 16px rgba(61, 90, 241, 0.18);
   transform: translateY(-1px);
 }
 
 .sb-icon {
   width: 16px;
   height: 16px;
-  color: #8c8ca0;
+  color: #9090b8;
   flex-shrink: 0;
   transition: color 200ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 
-.sb-row.focused .sb-icon {
-  color: #3d5af1;
-}
+.sb-row.focused .sb-icon { color: #3d5af1; }
 
 .sb-input {
   flex: 1;
   background: transparent;
   border: none;
   outline: none;
-  color: #ffffff;
+  color: #2a2a4c;
   font-size: 13.5px;
   min-width: 0;
   font-family: system-ui, -apple-system, sans-serif;
 }
-.sb-input::placeholder { color: #8c8ca0; }
+.sb-input::placeholder { color: #b0b0c8; }
 
 .sb-clear {
   display: flex; align-items: center; justify-content: center;
   background: none; border: none; cursor: pointer;
-  color: #8c8ca0; padding: 2px; border-radius: 6px; flex-shrink: 0;
+  color: #9090b8; padding: 2px; border-radius: 6px; flex-shrink: 0;
   transition: background-color 160ms, color 160ms;
 }
-.sb-clear:hover { color: #fff; background: rgba(255, 255, 255, 0.08); }
+.sb-clear:hover { color: #2a2a4c; background: #eeeef8; }
 .sb-clear:active { transform: scale(0.92); }
 .sb-clear svg { width: 14px; height: 14px; }
 
-/* Dropdown (floating independently) */
+/* Dropdown — light theme matching ResultsPanel */
 .sug-list {
   list-style: none;
-  background: rgba(22, 22, 42, 0.94);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: #ffffff;
+  border: 1px solid #d8d8e8;
   border-radius: 12px;
-  margin-top: 8px; /* 8px separation vertical */
+  margin-top: 6px;
   overflow: hidden;
-  box-shadow: 0 10px 30px rgba(0,0,0,0.35);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
   padding: 6px;
   display: flex;
   flex-direction: column;
@@ -389,18 +384,11 @@ defineExpose({ focus: () => inputEl.value?.focus() })
   cursor: pointer;
   border-radius: 8px;
   transition: background-color 160ms cubic-bezier(0.23, 1, 0.32, 1),
-              color 160ms cubic-bezier(0.23, 1, 0.32, 1),
               transform 160ms cubic-bezier(0.23, 1, 0.32, 1);
 }
-.sug-item:hover, .sug-item.active {
-  background: rgba(255, 255, 255, 0.05);
-}
-.sug-item.active {
-  background: rgba(61, 90, 241, 0.15);
-}
-.sug-item:active {
-  transform: scale(0.98);
-}
+.sug-item:hover { background: #f5f5fc; }
+.sug-item.active { background: rgba(61, 90, 241, 0.08); }
+.sug-item:active { transform: scale(0.98); }
 
 .sug-badge {
   flex-shrink: 0;
@@ -413,15 +401,13 @@ defineExpose({ focus: () => inputEl.value?.focus() })
   font-size: 11px;
   font-weight: 800;
   color: #fff;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
 }
 .sug-badge.primaria   { background: linear-gradient(135deg, #ef4444, #dc2626); }
 .sug-badge.secundaria { background: linear-gradient(135deg, #3b82f6, #2563eb); }
 .sug-badge.terciaria  { background: linear-gradient(135deg, #22c55e, #16a34a); }
 
-.coord-badge {
-  background: linear-gradient(135deg, #8b5cf6, #7c3aed);
-}
+.coord-badge { background: linear-gradient(135deg, #8b5cf6, #7c3aed); }
 .coord-badge svg { width: 13px; height: 13px; }
 
 .sug-texts {
@@ -435,14 +421,14 @@ defineExpose({ focus: () => inputEl.value?.focus() })
 .sug-codigo {
   font-size: 10px;
   font-weight: 800;
-  color: #6a8fff;
+  color: #3d5af1;
   font-family: 'Courier New', monospace;
   letter-spacing: 0.02em;
 }
 
 .sug-nombre {
   font-size: 12.5px;
-  color: #c0c0d8;
+  color: #5050a0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -450,9 +436,7 @@ defineExpose({ focus: () => inputEl.value?.focus() })
 }
 
 .sug-item:hover .sug-nombre,
-.sug-item.active .sug-nombre {
-  color: #ffffff;
-}
+.sug-item.active .sug-nombre { color: #2a2a4c; }
 
 .sug-enter-indicator {
   opacity: 0;
@@ -470,17 +454,14 @@ defineExpose({ focus: () => inputEl.value?.focus() })
   transform: translateX(0);
 }
 
-.enter-icon {
-  width: 14px;
-  height: 14px;
-}
+.enter-icon { width: 14px; height: 14px; }
 
-.coord-item .sug-nombre { color: #a78bfa; }
+.coord-item .sug-nombre { color: #7c3aed; }
 
 .sug-empty {
   padding: 10px 12px;
   font-size: 12.5px;
-  color: #8c8ca0;
+  color: #9090b8;
   font-style: italic;
 }
 
@@ -490,7 +471,6 @@ defineExpose({ focus: () => inputEl.value?.focus() })
   transition: opacity 180ms cubic-bezier(0.23, 1, 0.32, 1),
               transform 180ms cubic-bezier(0.23, 1, 0.32, 1);
 }
-
 .fade-scale-enter-from,
 .fade-scale-leave-to {
   opacity: 0;

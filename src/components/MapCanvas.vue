@@ -4,6 +4,7 @@
 
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue'
+import maplibregl from 'maplibre-gl'
 import { useMap } from '../composables/useMap'
 import { useLayers } from '../composables/useLayers'
 import { useQuery } from '../composables/useQuery'
@@ -22,6 +23,7 @@ const coordStore = useCoordStore()
 const { addPanelControls } = useMapControls()
 
 let map = null
+let hoverPopup = null
 
 onMounted(() => {
   map = initMap(mapEl.value, async () => {
@@ -43,11 +45,12 @@ onMounted(() => {
     }
   })
 
-  // Hover: crosshair in add mode, road pointer otherwise
+  // Hover: crosshair in add mode, road tooltip + pointer otherwise
   map.on('mousemove', (e) => {
     if (coordStore.addModeActive) {
       map.getCanvas().style.cursor = 'crosshair'
       updateHover(null)
+      hoverPopup?.remove()
       return
     }
     const layers = ROAD_LAYER_IDS.filter(id => map.getLayer(id))
@@ -55,6 +58,30 @@ onMounted(() => {
     const features = map.queryRenderedFeatures(e.point, { layers })
     map.getCanvas().style.cursor = features.length ? 'pointer' : ''
     updateHover(features[0] ?? null)
+
+    if (features.length) {
+      const props = features[0].properties
+      const nombre = props.NOMBRE_VIA || ''
+      const codigo = props.CODIGO_VIA || ''
+      if (!hoverPopup) {
+        hoverPopup = new maplibregl.Popup({
+          closeButton: false, closeOnClick: false,
+          anchor: 'bottom', offset: [0, -6],
+          className: 'road-hover-tooltip'
+        })
+      }
+      hoverPopup.setLngLat(e.lngLat)
+        .setHTML(`${codigo ? `<span class="rht-code">${codigo}</span>` : ''}<span class="rht-name">${nombre}</span>`)
+        .addTo(map)
+    } else {
+      hoverPopup?.remove()
+      hoverPopup = null
+    }
+  })
+
+  map.on('mouseleave', () => {
+    hoverPopup?.remove()
+    hoverPopup = null
   })
 })
 
