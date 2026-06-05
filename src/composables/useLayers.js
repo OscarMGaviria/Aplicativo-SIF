@@ -11,6 +11,14 @@ const ICON_SVGS = {
     <rect x="5.5" y="7.5" width="8" height="4.5" rx="1" fill="#ffffff" transform="rotate(-45 9.5 9.75)"/>
     <line x1="10" y1="22" x2="22" y2="10" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round"/>
     <path d="M20 8 L25 10 L23 15 L19 13 Z" fill="#ffffff"/>
+  </svg>`,
+  'foto-vias-icon': `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
+    <circle cx="16" cy="16" r="15" fill="#8b5cf6" stroke="#ffffff" stroke-width="1.5"/>
+    <rect x="7" y="12" width="18" height="12" rx="2" fill="#ffffff" opacity="0.92"/>
+    <path d="M13 10.5 L14.5 8 L17.5 8 L19 10.5 Z" fill="#ffffff" opacity="0.92"/>
+    <circle cx="16" cy="18" r="4" fill="#8b5cf6"/>
+    <circle cx="16" cy="18" r="2.3" fill="#ffffff" opacity="0.55"/>
+    <circle cx="21.5" cy="13.5" r="1.1" fill="#fbbf24"/>
   </svg>`
 }
 
@@ -54,7 +62,60 @@ export function useLayers() {
         map.addSource(layer.id, { type: 'geojson', data })
       }
 
-      if (layer.type === 'line') {
+      if (layer.type === 'cluster') {
+        // GeoJSON source with clustering enabled
+        if (!map.getSource(layer.id)) {
+          map.addSource(layer.id, {
+            type: 'geojson', data,
+            cluster: true,
+            clusterMaxZoom: layer.clusterMaxZoom ?? 14,
+            clusterRadius: 50
+          })
+        }
+        const clusterColor = layer.clusterColor || '#8b5cf6'
+        // Cluster bubble
+        if (!map.getLayer(layer.id + '-clusters')) {
+          map.addLayer({
+            id: layer.id + '-clusters', type: 'circle', source: layer.id,
+            filter: ['has', 'point_count'],
+            layout: { visibility: visible },
+            paint: {
+              'circle-color': clusterColor,
+              'circle-radius': ['step', ['get', 'point_count'], 14, 20, 18, 100, 22],
+              'circle-stroke-width': 2, 'circle-stroke-color': '#ffffff'
+            }
+          })
+        }
+        // Cluster count label
+        if (!map.getLayer(layer.id + '-cluster-count')) {
+          map.addLayer({
+            id: layer.id + '-cluster-count', type: 'symbol', source: layer.id,
+            filter: ['has', 'point_count'],
+            layout: {
+              'text-field': '{point_count_abbreviated}',
+              'text-size': 11,
+              'text-font': ['Open Sans Bold', 'Arial Unicode MS Bold'],
+              visibility: visible
+            },
+            paint: { 'text-color': '#ffffff' }
+          })
+        }
+        // Individual unclustered points
+        if (layer.iconImage) await _loadSvgImage(map, layer.iconImage)
+        if (!map.getLayer(layer.id)) {
+          map.addLayer({
+            id: layer.id, type: 'symbol', source: layer.id,
+            filter: ['!', ['has', 'point_count']],
+            layout: {
+              'icon-image': layer.iconImage || '',
+              'icon-size': layer.iconSize || 1,
+              'icon-allow-overlap': true,
+              'icon-ignore-placement': false,
+              visibility: visible
+            }
+          })
+        }
+      } else if (layer.type === 'line') {
         if (!map.getLayer(layer.id)) {
           map.addLayer({
             id: layer.id, type: 'line', source: layer.id,
@@ -124,6 +185,14 @@ export function useLayers() {
       return
     }
 
+    // Clustered layers: toggle all three sublayers together
+    if (map.getLayer(id + '-clusters')) {
+      map.setLayoutProperty(id + '-clusters', 'visibility', v)
+      if (map.getLayer(id + '-cluster-count')) map.setLayoutProperty(id + '-cluster-count', 'visibility', v)
+      if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', v)
+      return
+    }
+
     // Standard named layer (primaria, secundaria, terciaria, canteras)
     if (map.getLayer(id)) {
       map.setLayoutProperty(id, 'visibility', v)
@@ -133,6 +202,16 @@ export function useLayers() {
     // Custom layers: try all possible suffixes
     for (const suffix of ['-circle', '-line', '-fill', '-outline']) {
       if (map.getLayer(id + suffix)) map.setLayoutProperty(id + suffix, 'visibility', v)
+    }
+    // Labels: respect the showLabels style setting when turning on
+    if (map.getLayer(id + '-label')) {
+      if (!visible) {
+        map.setLayoutProperty(id + '-label', 'visibility', 'none')
+      } else {
+        const cl = layerStore.customLayers.find(l => l.id === id)
+        const labelV = cl?.style?.showLabels !== false ? 'visible' : 'none'
+        map.setLayoutProperty(id + '-label', 'visibility', labelV)
+      }
     }
 
     // Legacy fixed-ID KML sources
@@ -149,7 +228,7 @@ export function useLayers() {
     const map = mapStore.instance
     if (map) {
       // Remove all possible sub-layers for this source
-      for (const suffix of ['-circle', '-line', '-fill', '-outline']) {
+      for (const suffix of ['-circle', '-line', '-fill', '-outline', '-label']) {
         if (map.getLayer(id + suffix)) map.removeLayer(id + suffix)
       }
       if (map.getSource(id)) map.removeSource(id)
@@ -206,6 +285,15 @@ export function useLayers() {
       if (style.borderColor !== undefined)   map.setPaintProperty(outlineId, 'line-color', style.borderColor)
       if (style.borderWidth !== undefined)   map.setPaintProperty(outlineId, 'line-width', style.borderWidth)
       if (style.borderOpacity !== undefined) map.setPaintProperty(outlineId, 'line-opacity', style.borderOpacity)
+    }
+
+    const labelId = id + '-label'
+    if (map.getLayer(labelId)) {
+      if (style.showLabels !== undefined) {
+        map.setLayoutProperty(labelId, 'visibility', style.showLabels ? 'visible' : 'none')
+      }
+      if (style.labelSize !== undefined)  map.setLayoutProperty(labelId, 'text-size', style.labelSize)
+      if (style.labelColor !== undefined) map.setPaintProperty(labelId, 'text-color', style.labelColor)
     }
   }
 

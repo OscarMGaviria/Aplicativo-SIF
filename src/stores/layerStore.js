@@ -9,8 +9,8 @@ export const LAYERS = [
     label: 'Municipios',
     file: `${BASE}Municipios.geojson`,
     type: 'fill',
-    fillColor: '#6366f1',
-    lineColor: '#4f46e5',
+    fillColor: '#10b981',
+    lineColor: '#047857',
     order: 0
   },
   {
@@ -48,18 +48,30 @@ export const LAYERS = [
     iconImage: 'canteras-icon',
     iconSize: 0.75,
     order: 4
+  },
+  {
+    id: 'foto-vias',
+    label: 'Fotos Eje de Vías',
+    file: 'https://services5.arcgis.com/K90UQIB09TmTjUL8/arcgis/rest/services/Foto/FeatureServer/0/query?where=1%3D1&outFields=*&f=geojson',
+    type: 'cluster',
+    iconImage: 'foto-vias-icon',
+    iconSize: 0.65,
+    clusterColor: '#8b5cf6',
+    clusterMaxZoom: 15,
+    order: 5
   }
 ]
 
 // Default paint styles for each geometry type in custom/imported layers
 export const DEFAULT_STYLES = {
-  point:   { color: '#3d5af1', radius: 6, strokeColor: '#ffffff', strokeWidth: 1.5 },
+  point:   { color: '#3d5af1', radius: 6, strokeColor: '#ffffff', strokeWidth: 1.5,
+             showLabels: true, labelSize: 11, labelColor: '#2a2a4c' },
   line:    { color: '#06b6d4', width: 3.5, opacity: 0.85 },
   polygon: { fillColor: '#06b6d4', fillOpacity: 0.15, borderColor: '#0891b2', borderWidth: 1.5, borderOpacity: 0.7 }
 }
 
 export const useLayerStore = defineStore('layers', () => {
-  const OFF_BY_DEFAULT = new Set(['terciaria', 'canteras'])
+  const OFF_BY_DEFAULT = new Set(['terciaria', 'canteras', 'foto-vias'])
   const visibility = reactive(Object.fromEntries(LAYERS.map(l => [l.id, !OFF_BY_DEFAULT.has(l.id)])))
   const loaded = reactive(Object.fromEntries(LAYERS.map(l => [l.id, false])))
 

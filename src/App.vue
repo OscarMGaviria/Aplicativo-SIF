@@ -1,6 +1,7 @@
 <template>
   <div class="app">
     <WelcomeModal />
+    <PhotoModal />
     <AppToolbar />
 
     <div class="workspace">
@@ -29,6 +30,7 @@
 <script setup>
 import { storeToRefs } from 'pinia'
 import WelcomeModal  from './components/WelcomeModal.vue'
+import PhotoModal    from './components/PhotoModal.vue'
 import AppToolbar    from './components/AppToolbar.vue'
 import AppSearchBar  from './components/AppSearchBar.vue'
 import MapCanvas     from './components/MapCanvas.vue'

@@ -3,6 +3,7 @@ import maplibregl from 'maplibre-gl'
 import { useMapStore } from '../stores/mapStore'
 import { useLayerStore } from '../stores/layerStore'
 import { useQueryStore } from '../stores/queryStore'
+import { usePhotoStore } from '../stores/photoStore'
 import {
   chainSegments, getAbscissaAtPoint, getPointAtPK,
   getTotalLengthKm, formatPK
@@ -72,6 +73,13 @@ function _showRoadPopup(map, coords, formatted) {
 
 function _removeRoadPopup() {
   if (_roadPopup) { _roadPopup.remove(); _roadPopup = null }
+}
+
+// Map numeric COMPETENTE codes (stored in GeoJSON) to readable labels
+const COMPETENTE_MAP = {
+  '01': 'Nación (INVIAS)',          '1': 'Nación (INVIAS)',
+  '02': 'Municipio',                 '2': 'Municipio',
+  '03': 'Gobernación de Antioquia',  '3': 'Gobernación de Antioquia'
 }
 
 function cleanStr(str) {
@@ -302,7 +310,10 @@ export function useQuery() {
   }
 
   function _competente(layerId, raw) {
-    if (raw) return raw
+    if (raw) {
+      const label = COMPETENTE_MAP[String(raw).trim()]
+      return label ?? raw
+    }
     if (layerId === 'secundaria') return 'Gobernación de Antioquia'
     return ''
   }
@@ -311,12 +322,13 @@ export function useQuery() {
     const props = feature.properties
     const codigo = props.CODIGO_VIA || ''
     const nombre = props.NOMBRE_VIA || ''
+    const municipio = props.MUNICIPIO || ''
     const competente = _competente(layerId, props.COMPETENTE)
     const orden = props.ORDEN !== undefined ? props.ORDEN : ''
     const segs = _getSegments(codigo, nombre)
     const chainedCoords = (segs.length > 0 ? chainSegments(segs) : null)
       ?? chainSegments([feature])
-    return { codigo, nombre, competente, orden, chainedCoords, totalKm: getTotalLengthKm(chainedCoords) }
+    return { codigo, nombre, municipio, competente, orden, chainedCoords, totalKm: getTotalLengthKm(chainedCoords) }
   }
 
   function queryByCoords(lng, lat) {
@@ -358,7 +370,7 @@ export function useQuery() {
 
     if (!best) return queryStore.setError('No se encontró ninguna vía cercana.')
 
-    const { codigo, nombre, competente, orden, chainedCoords, totalKm } = _buildRoad(best.feature, best.layerId)
+    const { codigo, nombre, municipio, competente, orden, chainedCoords, totalKm } = _buildRoad(best.feature, best.layerId)
     const abs = getAbscissaAtPoint(lng, lat, chainedCoords)
 
     _setCoordData([lng, lat])
@@ -374,7 +386,7 @@ export function useQuery() {
       type: 'point', pk: abs.pk, formatted: abs.formatted,
       snappedCoords: abs.snappedCoords, distFromLine: abs.distFromLine,
       coordPoint: [lng, lat],
-      nombre, codigo, competente, orden, layerId: best.layerId, totalKm, chainedCoords
+      nombre, codigo, municipio, competente, orden, layerId: best.layerId, totalKm, chainedCoords
     })
   }
 
@@ -390,6 +402,7 @@ export function useQuery() {
     const totalKm = getTotalLengthKm(chainedCoords)
     const layerId = ROAD_LAYER_IDS.find(id => layerStore._cache[id]?.features.includes(segs[0])) || 'terciaria'
     const competente = _competente(layerId, props.COMPETENTE)
+    const municipio = props.MUNICIPIO || ''
     const orden = props.ORDEN !== undefined ? props.ORDEN : ''
 
     _setLineData(chainedCoords)
@@ -403,6 +416,7 @@ export function useQuery() {
       type: 'road',
       codigo: props.CODIGO_VIA || '',
       nombre: props.NOMBRE_VIA || '',
+      municipio,
       competente,
       orden,
       layerId,
@@ -457,6 +471,34 @@ export function useQuery() {
     if (!map) return
 
     const { x, y } = event.point
+    const photoStore = usePhotoStore()
+
+    // Fotos de eje de vía: cluster → zoom in; punto individual → abrir modal de foto
+    if (map.getLayer('foto-vias-clusters')) {
+      const clusterHits = map.queryRenderedFeatures([[x - 14, y - 14], [x + 14, y + 14]], {
+        layers: ['foto-vias-clusters']
+      })
+      if (clusterHits.length > 0) {
+        const clusterId = clusterHits[0].properties.cluster_id
+        const source = map.getSource('foto-vias')
+        if (source?.getClusterExpansionZoom) {
+          source.getClusterExpansionZoom(clusterId, (err, zoom) => {
+            if (err) return
+            map.easeTo({ center: clusterHits[0].geometry.coordinates, zoom: zoom + 0.5, duration: 500 })
+          })
+        }
+        return
+      }
+    }
+    if (map.getLayer('foto-vias')) {
+      const fotoHits = map.queryRenderedFeatures([[x - 14, y - 14], [x + 14, y + 14]], {
+        layers: ['foto-vias']
+      })
+      if (fotoHits.length > 0) {
+        photoStore.openFeature(fotoHits[0])
+        return
+      }
+    }
 
     // Canteras (puntos): máxima prioridad — click preciso sobre el ícono
     if (map.getLayer('canteras')) {
@@ -540,7 +582,7 @@ export function useQuery() {
     }
 
     const layerId = best.layer?.id || ''
-    const { codigo, nombre, competente, orden, chainedCoords, totalKm } = _buildRoad(best, layerId)
+    const { codigo, nombre, municipio, competente, orden, chainedCoords, totalKm } = _buildRoad(best, layerId)
     if (!chainedCoords) return
 
     const abs = getAbscissaAtPoint(event.lngLat.lng, event.lngLat.lat, chainedCoords)
@@ -557,7 +599,7 @@ export function useQuery() {
     queryStore.setResult({
       type: 'point', pk: abs.pk, formatted: abs.formatted,
       snappedCoords: abs.snappedCoords, distFromLine: abs.distFromLine,
-      nombre, codigo, competente, orden, layerId, totalKm, chainedCoords
+      nombre, codigo, municipio, competente, orden, layerId, totalKm, chainedCoords
     })
   }
 
