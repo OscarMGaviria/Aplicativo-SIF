@@ -160,7 +160,12 @@ export function useProject() {
           const lng = parseFloat(coords[0])
           const lat = parseFloat(coords[1])
           if (!isNaN(lng) && !isNaN(lat)) {
-            const nearestRoad = _findNearestRoad(lng, lat, map)
+            let nearestRoad = null
+            try {
+              nearestRoad = _findNearestRoad(lng, lat, map)
+            } catch (err) {
+              console.warn('[useProject] nearestRoad lookup failed for KML point:', err)
+            }
             newPoints.push({
               id: `${Date.now()}-${i}-${j}`,
               idx: coordStore.points.length + newPoints.length + 1,

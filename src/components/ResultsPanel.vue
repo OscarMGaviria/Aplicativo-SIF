@@ -125,12 +125,10 @@
           <span class="pk-nav-label">Ir a abscisa</span>
           <div class="pk-nav-row">
             <input
-              :value="pkInput"
+              v-model="pkInput"
               class="pk-nav-input"
               type="text"
               placeholder="k0+000"
-              @input="onPKInput"
-              @blur="onPKBlur"
               @keyup.enter="goPK"
             />
             <button class="pk-nav-btn" @click="goPK" title="Ir a abscisa">
@@ -196,36 +194,20 @@ function close() {
   pkError.value = ''
 }
 
-function onPKInput(e) {
-  const raw = e.target.value
-  if (!raw) { pkInput.value = ''; return }
-  let work = /^k/i.test(raw) ? raw.slice(1) : raw
-  const plusIdx = work.indexOf('+')
-  if (plusIdx === -1) {
-    const km = work.replace(/\D/g, '')
-    pkInput.value = km ? `k${km}` : ''
-  } else {
-    const km = work.slice(0, plusIdx).replace(/\D/g, '')
-    const m = work.slice(plusIdx + 1).replace(/\D/g, '').slice(0, 3)
-    pkInput.value = `k${km}+${m}`
-  }
-}
-
-function onPKBlur() {
-  const val = pkInput.value
-  if (!val) return
-  const plusIdx = val.indexOf('+')
-  if (plusIdx !== -1) {
-    const km = val.slice(1, plusIdx)
-    const m = val.slice(plusIdx + 1)
-    pkInput.value = `k${km}+${m.padStart(3, '0')}`
-  }
-}
 
 function goPK() {
   pkError.value = ''
-  const meters = parsePK(pkInput.value)
+  const val = String(pkInput.value || '').trim()
+  if (!val) return
+
+  const meters = parsePK(val)
   if (meters === null) { pkError.value = 'Formato requerido: k5+350'; return }
+
+  // Formatear automáticamente al presionar enter o el botón
+  const km = Math.floor(meters / 1000)
+  const m = Math.round(meters % 1000)
+  pkInput.value = `k${km}+${String(m).padStart(3, '0')}`
+
   const cod = result.value?.codigo
   const nom = result.value?.nombre
   if (!cod && !nom) { pkError.value = 'Sin vía seleccionada'; return }

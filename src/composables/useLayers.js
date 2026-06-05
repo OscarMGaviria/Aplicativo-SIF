@@ -1,6 +1,8 @@
 import { markRaw } from 'vue'
 import { useMapStore } from '../stores/mapStore'
 import { useLayerStore, LAYERS } from '../stores/layerStore'
+import { useCoordStore } from '../stores/coordStore'
+import { useCoords } from './useCoords'
 
 // SVG de pico y martillo cruzados — símbolo universal de cantera/minería
 const ICON_SVGS = {
@@ -30,6 +32,7 @@ function _loadSvgImage(map, name) {
 export function useLayers() {
   const mapStore = useMapStore()
   const layerStore = useLayerStore()
+  const coordStore = useCoordStore()
 
   async function loadAllLayers() {
     const map = mapStore.instance
@@ -129,13 +132,44 @@ export function useLayers() {
     if (!map) return
     layerStore.visibility[id] = visible
     const v = visible ? 'visible' : 'none'
+    
     if (id === 'municipios') {
       if (map.getLayer(id + '-fill')) map.setLayoutProperty(id + '-fill', 'visibility', v)
       if (map.getLayer(id + '-line')) map.setLayoutProperty(id + '-line', 'visibility', v)
+    } else if (id === 'custom-kml') {
+      if (map.getLayer('kml-lines-layer')) map.setLayoutProperty('kml-lines-layer', 'visibility', v)
+      if (map.getLayer('kml-polygons-fill')) map.setLayoutProperty('kml-polygons-fill', 'visibility', v)
+      if (map.getLayer('kml-polygons-outline')) map.setLayoutProperty('kml-polygons-outline', 'visibility', v)
+      
+      const { syncLayer } = useCoords()
+      syncLayer()
+    } else if (id.startsWith('custom-geojson-')) {
+      if (map.getLayer(id + '-fill')) map.setLayoutProperty(id + '-fill', 'visibility', v)
+      if (map.getLayer(id + '-line')) map.setLayoutProperty(id + '-line', 'visibility', v)
+      if (map.getLayer(id + '-circle')) map.setLayoutProperty(id + '-circle', 'visibility', v)
     } else {
       if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', v)
     }
   }
 
-  return { loadAllLayers, setLayerVisibility }
+  function deleteCustomLayer(id) {
+    const map = mapStore.instance
+    if (id === 'custom-kml') {
+      coordStore.setKmlData([], [])
+      coordStore.setPoints(coordStore.points.filter(p => p.layerId !== 'custom-kml'))
+      const { syncLayer } = useCoords()
+      syncLayer()
+    } else if (id.startsWith('custom-geojson-')) {
+      if (map) {
+        if (map.getLayer(id + '-fill')) map.removeLayer(id + '-fill')
+        if (map.getLayer(id + '-line')) map.removeLayer(id + '-line')
+        if (map.getLayer(id + '-circle')) map.removeLayer(id + '-circle')
+        if (map.getSource(id)) map.removeSource(id)
+      }
+      layerStore.removeCustomLayer(id)
+      delete layerStore._cache[id]
+    }
+  }
+
+  return { loadAllLayers, setLayerVisibility, deleteCustomLayer }
 }

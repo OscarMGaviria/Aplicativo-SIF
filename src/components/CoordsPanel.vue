@@ -25,7 +25,7 @@
         Activa "Agregar punto" y haz click sobre el mapa.
       </p>
 
-      <div v-for="p in points" :key="p.id" class="point-card">
+      <div v-for="p in points" :key="p.id" class="point-card" :class="{ 'layer-hidden': isPointHidden(p) }">
         <div class="point-top">
           <input
             class="point-name"
@@ -72,9 +72,17 @@
 </template>
 
 <script setup>
+import { onUnmounted } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useCoordStore } from '../stores/coordStore'
 import { useCoords } from '../composables/useCoords'
+import { useLayerStore } from '../stores/layerStore'
+
+const layerStore = useLayerStore()
+
+function isPointHidden(p) {
+  return p.layerId && layerStore.visibility[p.layerId] === false
+}
 
 const emit = defineEmits(['close'])
 
@@ -92,6 +100,10 @@ function clearAll() {
   coordStore.clear()
   syncLayer()
 }
+
+onUnmounted(() => {
+  coordStore.addModeActive = false
+})
 </script>
 
 <style scoped>
@@ -189,6 +201,13 @@ function clearAll() {
   display: flex;
   flex-direction: column;
   gap: 4px;
+  transition: opacity 0.2s, border-style 0.2s;
+}
+
+.point-card.layer-hidden {
+  opacity: 0.5;
+  border-style: dashed;
+  background: #fafafa;
 }
 
 .point-top {

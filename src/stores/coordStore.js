@@ -4,6 +4,8 @@ import { ref } from 'vue'
 export const useCoordStore = defineStore('coords', () => {
   const addModeActive = ref(false)
   const points = ref([])
+  const kmlLines = ref([])
+  const kmlPolygons = ref([])
 
   function addPoint(p) { points.value.push(p) }
 
@@ -18,7 +20,19 @@ export const useCoordStore = defineStore('coords', () => {
 
   function setPoints(pts) { points.value = pts }
 
-  function clear() { points.value = [] }
+  function setKmlData(lines, polygons) {
+    kmlLines.value = lines
+    kmlPolygons.value = polygons
+  }
 
-  return { addModeActive, points, addPoint, removePoint, updateName, setPoints, clear }
+  function clear() {
+    points.value = []
+    kmlLines.value = []
+    kmlPolygons.value = []
+  }
+
+  return {
+    addModeActive, points, kmlLines, kmlPolygons,
+    addPoint, removePoint, updateName, setPoints, setKmlData, clear
+  }
 })

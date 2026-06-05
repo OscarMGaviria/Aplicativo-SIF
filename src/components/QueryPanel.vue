@@ -69,8 +69,8 @@
           </ul>
         </div>
         <label class="field-label">Abscisa (k0+000)</label>
-        <input v-model="pkValue" class="field-input" type="text"
-          placeholder="ej. k5+350" @keyup.enter="runPK" />
+        <input :value="pkValue" class="field-input" type="text"
+          placeholder="ej. k5+350" @input="onPKInput" @keyup.enter="runPK" />
         <p v-if="pkParseError" class="field-error">{{ pkParseError }}</p>
         <button class="run-btn" :disabled="!pkRoad.trim() || !pkValue.trim()" @click="runPK">
           Consultar
@@ -146,6 +146,64 @@ function runPK() {
   }
   acSuggestions.value = []
   queryByPK(pkRoad.value, meters)
+}
+
+function onPKInput(e) {
+  const input = e.target
+  const val = input.value
+
+  // Contar cuántos dígitos había antes del cursor para preservar la posición
+  const selectionStart = input.selectionStart
+  let digitsBeforeCursor = 0
+  for (let i = 0; i < selectionStart; i++) {
+    if (val[i] >= '0' && val[i] <= '9') {
+      digitsBeforeCursor++
+    }
+  }
+
+  // Extraer solo dígitos
+  const digits = val.replace(/\D/g, '')
+
+  if (!digits) {
+    pkValue.value = ''
+    return
+  }
+
+  // Si el usuario está borrando y lo que queda son solo ceros, vaciar el campo
+  const isDeleting = e.inputType && e.inputType.startsWith('delete')
+  if (isDeleting && /^0+$/.test(digits)) {
+    pkValue.value = ''
+    return
+  }
+
+  const num = parseInt(digits, 10)
+  const km = Math.floor(num / 1000)
+  const m = num % 1000
+  const formatted = `k${km}+${String(m).padStart(3, '0')}`
+
+  pkValue.value = formatted
+
+  // Esperar a que Vue actualice el DOM para restaurar la posición del cursor
+  setTimeout(() => {
+    let newCursorPos = 0
+    let digitCount = 0
+    for (let i = 0; i < formatted.length; i++) {
+      if (formatted[i] >= '0' && formatted[i] <= '9') {
+        digitCount++
+      }
+      newCursorPos = i + 1
+      if (digitCount === digitsBeforeCursor) {
+        break
+      }
+    }
+
+    if (digitsBeforeCursor === 0) {
+      newCursorPos = formatted.indexOf(digits[0])
+      if (newCursorPos < 0) newCursorPos = 0
+    }
+
+    input.setSelectionRange(newCursorPos, newCursorPos)
+  }, 0)
 }
 
 // --- Click mode ---

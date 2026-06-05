@@ -315,14 +315,40 @@ export function useQuery() {
   function queryByCoords(lng, lat) {
     const pt = turf.point([lng, lat])
     let best = null, bestDist = Infinity
+
+    // Pass 1: only features with at least one vertex within ~0.5° (~55 km).
+    // This avoids calling the expensive nearestPointOnLine on distant segments.
+    const NEAR_DEG = 0.5
     for (const layerId of ROAD_LAYER_IDS) {
       const data = layerStore._cache[layerId]
       if (!data) continue
       for (const f of data.features) {
+        const coords = f.geometry?.coordinates
+        if (!Array.isArray(coords)) continue
+        let near = false
+        for (const v of coords) {
+          if (Math.abs(v[0] - lng) <= NEAR_DEG && Math.abs(v[1] - lat) <= NEAR_DEG) {
+            near = true; break
+          }
+        }
+        if (!near) continue
         const snapped = turf.nearestPointOnLine(f, pt, { units: 'kilometers' })
         if (snapped.properties.dist < bestDist) { bestDist = snapped.properties.dist; best = { feature: f, layerId } }
       }
     }
+
+    // Pass 2 fallback: full scan when no road is within the quick radius.
+    if (!best) {
+      for (const layerId of ROAD_LAYER_IDS) {
+        const data = layerStore._cache[layerId]
+        if (!data) continue
+        for (const f of data.features) {
+          const snapped = turf.nearestPointOnLine(f, pt, { units: 'kilometers' })
+          if (snapped.properties.dist < bestDist) { bestDist = snapped.properties.dist; best = { feature: f, layerId } }
+        }
+      }
+    }
+
     if (!best) return queryStore.setError('No se encontró ninguna vía cercana.')
 
     const { codigo, nombre, competente, orden, chainedCoords, totalKm } = _buildRoad(best.feature, best.layerId)
