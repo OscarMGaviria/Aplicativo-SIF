@@ -295,18 +295,14 @@ export function useProject() {
         }
       }
 
-      // Check if GeoJSON has any elements with valid coordinates
-      let hasCoordinates = false
-      if (geojsonData.type === 'FeatureCollection' && Array.isArray(geojsonData.features)) {
-        for (const f of geojsonData.features) {
-          if (f.geometry && Array.isArray(f.geometry.coordinates) && f.geometry.coordinates.length > 0) {
-            hasCoordinates = true
-            break
-          }
-        }
+      // Verify the FeatureCollection has at least one feature with geometry
+      const features = geojsonData.type === 'FeatureCollection' ? geojsonData.features : []
+      if (!Array.isArray(features) || features.length === 0) {
+        throw new Error('El archivo no contiene ningún elemento para mostrar.')
       }
-      if (!hasCoordinates) {
-        throw new Error('El archivo GeoJSON no contiene ninguna coordenada o geometría válida en sus elementos.')
+      const hasGeometry = features.some(f => f.geometry != null)
+      if (!hasGeometry) {
+        throw new Error('El archivo no contiene geometrías para mostrar en el mapa.')
       }
 
       const layerId = 'custom-geojson-' + Date.now()
@@ -333,19 +329,6 @@ export function useProject() {
     }
 
     if (data.type === 'FeatureCollection') {
-      // Check if GeoJSON has any elements with valid coordinates
-      let hasCoordinates = false
-      if (Array.isArray(data.features)) {
-        for (const f of data.features) {
-          if (f.geometry && Array.isArray(f.geometry.coordinates) && f.geometry.coordinates.length > 0) {
-            hasCoordinates = true
-            break
-          }
-        }
-      }
-      if (!hasCoordinates) {
-        throw new Error('El GeoJSON no contiene ninguna coordenada o geometría válida en sus elementos.')
-      }
 
       // 1. New GeoJSON Format
       const meta = data.projectMetadata
