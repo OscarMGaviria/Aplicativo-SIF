@@ -279,6 +279,13 @@ export function useQuery() {
     }
 
     if (!c && !n) return []
+
+    // When code and name are both provided and differ (i.e. a specific road was
+    // selected from suggestions), match strictly by code to avoid merging roads
+    // that share the same name but have different codes (e.g. two "El Cardal" roads).
+    // Fall back to name-only when there is no code or it is a single-term search (c === n).
+    const codeOnly = c && n && c !== n
+
     const out = []
     for (const layerId of ROAD_LAYER_IDS) {
       const data = layerStore._cache[layerId]
@@ -286,7 +293,7 @@ export function useQuery() {
       for (const f of data.features) {
         const fCodigo = cleanStr(f.properties.CODIGO_VIA)
         const fNombre = cleanStr(f.properties.NOMBRE_VIA)
-        if ((c && fCodigo === c) || (n && fNombre === n)) {
+        if (codeOnly ? fCodigo === c : (c && fCodigo === c) || (n && fNombre === n)) {
           out.push(f)
         }
       }
