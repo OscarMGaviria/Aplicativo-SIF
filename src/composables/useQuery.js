@@ -11,6 +11,28 @@ import {
 const ROAD_LAYER_IDS = ['primaria', 'secundaria', 'terciaria']
 const EMPTY_FC = { type: 'FeatureCollection', features: [] }
 
+// HTML markers for Inicio / Fin labels (no font CDN dependency)
+let _startMarker = null
+let _endMarker = null
+
+function _makeEndpointMarker(lngLat, label, color) {
+  const el = document.createElement('div')
+  el.style.cssText = `
+    background:${color};color:#fff;font-size:10px;font-weight:700;
+    padding:2px 6px;border-radius:4px;white-space:nowrap;
+    box-shadow:0 1px 4px rgba(0,0,0,.35);pointer-events:none;
+    font-family:system-ui,-apple-system,sans-serif;
+  `
+  el.textContent = label
+  return new maplibregl.Marker({ element: el, anchor: 'bottom', offset: [0, -12] })
+    .setLngLat(lngLat)
+}
+
+function _removeEndpointMarkers() {
+  if (_startMarker) { _startMarker.remove(); _startMarker = null }
+  if (_endMarker)   { _endMarker.remove();   _endMarker   = null }
+}
+
 // Campos candidatos para el nombre de una cantera (en orden de preferencia)
 const CANTERA_NAME_FIELDS = ['NOMBRE_', 'NOMBRE', 'NOMBRE_CANTERA', 'RAZON_SOCIAL',
   'NOMBRE_PREDIO', 'NOM_CANTERA', 'DESCRIPCION']
@@ -114,27 +136,6 @@ export function useQuery() {
         }
       })
 
-      try {
-        map.addLayer({
-          id: 'query-endpoints-label',
-          type: 'symbol',
-          source: 'query-endpoints',
-          layout: {
-            'text-field': ['get', 'label'],
-            'text-font': ['Open Sans Regular'],
-            'text-size': 11,
-            'text-offset': [0, -1.8],
-            'text-anchor': 'bottom'
-          },
-          paint: {
-            'text-color': '#1e293b',
-            'text-halo-color': '#ffffff',
-            'text-halo-width': 2
-          }
-        })
-      } catch (e) {
-        console.warn('[query] endpoint labels not available:', e)
-      }
 
     }
 
@@ -184,6 +185,7 @@ export function useQuery() {
     if (map?.getSource('query-point')) map.getSource('query-point').setData(EMPTY_FC)
     if (map?.getSource('query-coord')) map.getSource('query-coord').setData(EMPTY_FC)
     if (map?.getSource('query-endpoints')) map.getSource('query-endpoints').setData(EMPTY_FC)
+    _removeEndpointMarkers()
     _removeCanteraPopup()
     _removeRoadPopup()
     queryStore.clear()
@@ -195,18 +197,27 @@ export function useQuery() {
   }
 
   function _setEndpointsData(coords) {
-    const src = mapStore.instance?.getSource('query-endpoints')
+    const map = mapStore.instance
+    const src = map?.getSource('query-endpoints')
+    _removeEndpointMarkers()
     if (!src) return
     if (!coords || coords.length < 2) {
       src.setData(EMPTY_FC)
       return
     }
-    const startPt = turf.point(coords[0], { type: 'start', label: 'Inicio' })
-    const endPt = turf.point(coords[coords.length - 1], { type: 'end', label: 'Fin' })
+    const start = coords[0]
+    const end   = coords[coords.length - 1]
     src.setData({
       type: 'FeatureCollection',
-      features: [startPt, endPt]
+      features: [
+        turf.point(start, { type: 'start' }),
+        turf.point(end,   { type: 'end'   })
+      ]
     })
+    if (map) {
+      _startMarker = _makeEndpointMarker(start, 'Inicio', '#10b981').addTo(map)
+      _endMarker   = _makeEndpointMarker(end,   'Fin',    '#ef4444').addTo(map)
+    }
   }
 
   function _setPointData(coords) {
@@ -423,11 +434,11 @@ export function useQuery() {
         const f = hits[0]
         const coords = f.geometry.coordinates
 
-        // Sin punto naranja para canteras — el ícono propio es suficiente
         _setLineData(null)
         _setEndpointsData(null)
         _setCoordData(null)
         _setPointData(null)
+        _removeRoadPopup()
 
         // Tooltip con el nombre encima del ícono
         _removeCanteraPopup()
