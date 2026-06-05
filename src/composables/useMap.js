@@ -70,7 +70,7 @@ export const BASE_MAPS = [
           paint: { 'hillshade-shadow-color': '#473B24' }
         }
       ],
-      glyphs: 'https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf'
+      glyphs: 'https://fonts.openmaptiles.org/{fontstack}/{range}.pbf'
     }
   },
   {
@@ -86,7 +86,7 @@ export const BASE_MAPS = [
           paint: { 'background-color': '#e8e8e8' }
         }
       ],
-      glyphs: 'https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf'
+      glyphs: 'https://fonts.openmaptiles.org/{fontstack}/{range}.pbf'
     }
   }
 ]
@@ -108,7 +108,10 @@ export function useMap() {
       attributionControl: false
     })
 
-    // Dynamically inject terrainSource to any style so TerrainControl is always functional
+    // Dynamically inject terrainSource to any style so TerrainControl is always functional.
+    // Also override glyphs to fonts.openmaptiles.org which correctly serves combined font
+    // stacks (e.g. "Open Sans Regular,Arial Unicode MS Regular") — OpenFreeMap's own CDN
+    // returns 404 for combined stacks, causing infinite retry cascades that freeze the UI.
     map.on('style.load', () => {
       if (!map.getSource('terrainSource')) {
         map.addSource('terrainSource', {
@@ -118,6 +121,9 @@ export function useMap() {
           tileSize: 256,
           maxzoom: 15
         })
+      }
+      if (typeof map.setGlyphs === 'function') {
+        map.setGlyphs('https://fonts.openmaptiles.org/{fontstack}/{range}.pbf')
       }
     })
 
