@@ -105,7 +105,17 @@ export function useMap() {
       zoom: ANTIOQUIA_HOME.zoom,
       pitch: 0,
       maxPitch: 85,
-      attributionControl: false
+      attributionControl: false,
+      transformRequest: (url, resourceType) => {
+        // Redirect OpenFreeMap font requests to fonts.openmaptiles.org which correctly
+        // serves combined fontstacks (e.g. "Open Sans Regular,Arial Unicode MS Regular").
+        // OpenFreeMap's CDN returns 404 for combined stacks causing infinite retry cascades.
+        if (resourceType === 'Glyphs' && url.includes('tiles.openfreemap.org/fonts/')) {
+          const path = url.replace(/^.*tiles\.openfreemap\.org\/fonts\//, '')
+          return { url: `https://fonts.openmaptiles.org/${path}` }
+        }
+        return { url }
+      }
     })
 
     // Dynamically inject terrainSource to any style so TerrainControl is always functional.
