@@ -1,11 +1,13 @@
 import { defineStore } from 'pinia'
-import { reactive } from 'vue'
+import { reactive, ref } from 'vue'
+
+const BASE = import.meta.env.BASE_URL
 
 export const LAYERS = [
   {
     id: 'municipios',
     label: 'Municipios',
-    file: '/Municipios.geojson',
+    file: `${BASE}Municipios.geojson`,
     type: 'fill',
     fillColor: '#6366f1',
     lineColor: '#4f46e5',
@@ -14,7 +16,7 @@ export const LAYERS = [
   {
     id: 'terciaria',
     label: 'Red Terciaria',
-    file: '/Terciaria.geojson',
+    file: `${BASE}Terciaria.geojson`,
     type: 'line',
     color: '#16a34a',
     lineWidth: 1,
@@ -23,7 +25,7 @@ export const LAYERS = [
   {
     id: 'secundaria',
     label: 'Red Secundaria',
-    file: '/Secundaria.geojson',
+    file: `${BASE}Secundaria.geojson`,
     type: 'line',
     color: '#2563eb',
     lineWidth: 2,
@@ -32,7 +34,7 @@ export const LAYERS = [
   {
     id: 'primaria',
     label: 'Red Primaria',
-    file: '/Primaria.geojson',
+    file: `${BASE}Primaria.geojson`,
     type: 'line',
     color: '#dc2626',
     lineWidth: 3.5,
@@ -53,12 +55,37 @@ export const useLayerStore = defineStore('layers', () => {
   const OFF_BY_DEFAULT = new Set(['terciaria', 'canteras'])
   const visibility = reactive(Object.fromEntries(LAYERS.map(l => [l.id, !OFF_BY_DEFAULT.has(l.id)])))
   const loaded = reactive(Object.fromEntries(LAYERS.map(l => [l.id, false])))
+  
   // Cache GeoJSON data to avoid re-fetching on base map style changes
   const _cache = {}
+
+  // Custom layers imported at runtime (KML, GeoJSON, etc.)
+  const customLayers = ref([])
+
+  function addCustomLayer(layer) {
+    customLayers.value = customLayers.value.filter(l => l.id !== layer.id)
+    customLayers.value.push(layer)
+    visibility[layer.id] = true
+  }
+
+  function removeCustomLayer(id) {
+    customLayers.value = customLayers.value.filter(l => l.id !== id)
+    delete visibility[id]
+  }
+
+  function clearCustomLayers() {
+    customLayers.value.forEach(l => {
+      delete visibility[l.id]
+    })
+    customLayers.value = []
+  }
 
   function resetLoaded() {
     LAYERS.forEach(l => { loaded[l.id] = false })
   }
 
-  return { visibility, loaded, _cache, resetLoaded }
+  return {
+    visibility, loaded, _cache, customLayers,
+    addCustomLayer, removeCustomLayer, clearCustomLayers, resetLoaded
+  }
 })
