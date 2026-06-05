@@ -177,6 +177,18 @@ export function useMap() {
       'bottom-right'
     )
 
+    // Tilt to 3D when terrain is enabled via the TerrainControl button;
+    // return flat when terrain is turned off.
+    map.on('terrain', () => {
+      if (map.getTerrain()) {
+        if (map.getPitch() < 20) {
+          map.easeTo({ pitch: 60, duration: 1000 })
+        }
+      } else {
+        map.easeTo({ pitch: 0, duration: 800 })
+      }
+    })
+
     window.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') flyToAntioquia(map)
     })
