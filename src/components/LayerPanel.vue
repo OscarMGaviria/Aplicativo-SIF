@@ -72,6 +72,27 @@
                 <input type="color" :value="layer.style?.strokeColor ?? '#ffffff'"
                   @input="e => applyStyle(layer.id, { strokeColor: e.target.value })" />
               </div>
+              <div class="se-divider" />
+              <div class="se-row">
+                <label>Etiquetas</label>
+                <button class="se-toggle" :class="{ on: layer.style?.showLabels !== false }"
+                  @click="applyStyle(layer.id, { showLabels: layer.style?.showLabels === false })">
+                  {{ layer.style?.showLabels !== false ? 'Visible' : 'Oculta' }}
+                </button>
+              </div>
+              <template v-if="layer.style?.showLabels !== false">
+                <div class="se-row">
+                  <label>Color etiqueta</label>
+                  <input type="color" :value="layer.style?.labelColor ?? '#2a2a4c'"
+                    @input="e => applyStyle(layer.id, { labelColor: e.target.value })" />
+                </div>
+                <div class="se-row">
+                  <label>Tamaño <span class="se-val">{{ layer.style?.labelSize ?? 11 }}px</span></label>
+                  <input type="range" min="8" max="20" step="1"
+                    :value="layer.style?.labelSize ?? 11"
+                    @input="e => applyStyle(layer.id, { labelSize: +e.target.value })" />
+                </div>
+              </template>
             </template>
 
             <!-- LINE -->
@@ -320,5 +341,19 @@ function removeCustomLayer(id) {
 
 .se-row input[type="range"] {
   flex: 1; accent-color: #3d5af1; cursor: pointer; height: 4px;
+}
+
+.se-divider {
+  height: 1px; background: #eeeef8; margin: 2px 0;
+}
+
+.se-toggle {
+  font-size: 10px; font-weight: 600; padding: 2px 8px;
+  border-radius: 10px; border: 1px solid #d8d8e8;
+  background: #f0f0f8; color: #8080b0; cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.se-toggle.on {
+  background: #eef2ff; color: #3d5af1; border-color: #c7d2fe;
 }
 </style>

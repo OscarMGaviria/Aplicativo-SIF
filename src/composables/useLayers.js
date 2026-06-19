@@ -89,8 +89,7 @@ export function useLayers() {
           layerStore._cache[layer.id] = markRaw({ type: 'FeatureCollection', features: allFeatures })
 
           if (firstPage.length >= PAGE) {
-            // Fire and forget — updates source progressively as more pages arrive
-            _loadMorePages(map, layer, allFeatures, PAGE).catch(() => {})
+            await _loadMorePages(map, layer, allFeatures, PAGE)
           }
         } else {
           const res = await fetch(layer.file)

@@ -3,7 +3,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted, watch } from 'vue'
 import maplibregl from 'maplibre-gl'
 import { useMap } from '../composables/useMap'
 import { useLayers } from '../composables/useLayers'
@@ -11,6 +11,8 @@ import { useQuery } from '../composables/useQuery'
 import { useCoords } from '../composables/useCoords'
 import { useCoordStore } from '../stores/coordStore'
 import { useMapControls } from '../composables/useMapControls'
+import { useExport } from '../composables/useExport'
+import { useExportStore } from '../stores/exportStore'
 
 const ROAD_LAYER_IDS = ['primaria', 'secundaria', 'terciaria']
 
@@ -19,7 +21,9 @@ const { initMap } = useMap()
 const { loadAllLayers } = useLayers()
 const { initQueryLayers, handleMapClick: handleRoadClick, updateHover } = useQuery()
 const { initCoordsLayer, handleMapClick: handleCoordClick } = useCoords()
+const { initExportLayers, updateExportMapSource } = useExport()
 const coordStore = useCoordStore()
+const exportStore = useExportStore()
 const { addPanelControls } = useMapControls()
 
 let map = null
@@ -31,8 +35,19 @@ onMounted(() => {
       await loadAllLayers()
       initQueryLayers()
       initCoordsLayer()
+      initExportLayers()
+      updateExportMapSource()
     }
   })
+
+  // Watch for selected roads to update map visuals
+  watch(
+    () => exportStore.selectedRoads,
+    () => {
+      updateExportMapSource()
+    },
+    { deep: true }
+  )
 
   addPanelControls()
 

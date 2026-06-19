@@ -113,68 +113,6 @@ export function useProject() {
     _download(JSON.stringify(geojson, null, 2), 'proyecto-abscisas.geojson', 'application/geo+json')
   }
 
-  // ─── Export GeoJSON (all user data + custom layers) ────────────────────────
-  function exportGeoJSON() {
-    const allFeatures = []
-
-    // User-created markers
-    for (const p of coordStore.points) {
-      allFeatures.push({
-        type: 'Feature',
-        geometry: { type: 'Point', coordinates: [p.lng, p.lat] },
-        properties: { name: p.name, _layer: 'Puntos creados' }
-      })
-    }
-
-    // All custom imported layers
-    for (const l of layerStore.customLayers) {
-      const data = layerStore._cache[l.id]
-      if (!data?.features) continue
-      data.features.forEach(f => {
-        allFeatures.push({
-          ...f,
-          properties: { ...(f.properties ?? {}), _layer: l.label }
-        })
-      })
-    }
-
-    if (!allFeatures.length) return
-
-    const geojson = { type: 'FeatureCollection', features: allFeatures }
-    _download(JSON.stringify(geojson, null, 2), 'exportacion.geojson', 'application/geo+json')
-  }
-
-  // ─── Export KMZ (all user data + custom layers) ────────────────────────────
-  async function exportKMZ() {
-    const folders = []
-
-    // User-created markers
-    if (coordStore.points.length > 0) {
-      folders.push({
-        name: 'Puntos creados',
-        features: coordStore.points.map(p => ({
-          type: 'Feature',
-          geometry: { type: 'Point', coordinates: [p.lng, p.lat] },
-          properties: { name: p.name }
-        }))
-      })
-    }
-
-    // Custom imported layers
-    for (const l of layerStore.customLayers) {
-      const data = layerStore._cache[l.id]
-      if (!data?.features?.length) continue
-      folders.push({ name: l.label, features: data.features })
-    }
-
-    if (!folders.length) return
-
-    const kml = buildKml(folders)
-    const zip = new JSZip()
-    zip.file('doc.kml', kml)
-    const blob = await zip.generateAsync({ type: 'blob' })
-    _download(blob, 'exportacion.kmz', 'application/vnd.google-earth.kmz')
-  }
 
   // ─── Load KML / KMZ — creates separate layers per geometry type ────────────
   async function loadKmlKmz(file) {
@@ -466,5 +404,5 @@ export function useProject() {
     URL.revokeObjectURL(url)
   }
 
-  return { saveProject, loadProject, exportGeoJSON, exportKMZ }
+  return { saveProject, loadProject }
 }

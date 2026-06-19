@@ -81,6 +81,10 @@
               <td class="rt-k">Código</td>
               <td class="rt-v mono">{{ result.codigo }}</td>
             </tr>
+            <tr v-if="result.municipio">
+              <td class="rt-k">Municipio</td>
+              <td class="rt-v">{{ result.municipio }}</td>
+            </tr>
             <tr v-if="result.orden !== undefined && result.orden !== ''">
               <td class="rt-k">Orden</td>
               <td class="rt-v mono">{{ result.orden }}</td>
@@ -119,6 +123,21 @@
             </template>
           </tbody>
         </table>
+ 
+        <!-- Illustrator selection toggle -->
+        <div v-if="result.chainedCoords" class="illustrator-toggle-area">
+          <button 
+            class="illustrator-toggle-btn" 
+            :class="{ active: isRoadInExport }"
+            @click="toggleExportRoad"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="ai-icon">
+              <path v-if="isRoadInExport" d="M5 12h14" />
+              <path v-else d="M12 5v14M5 12h14" />
+            </svg>
+            {{ isRoadInExport ? 'Quitar de Illustrator' : 'Añadir a Illustrator' }}
+          </button>
+        </div>
 
         <!-- Go-to-PK input: solo para vías, no para canteras -->
         <div v-if="result.type !== 'cantera'" class="pk-nav">
@@ -141,8 +160,67 @@
           <transition name="fade-slide-up">
             <p v-if="pkError" class="pk-error">{{ pkError }}</p>
           </transition>
+
+          <!-- Lista local de puntos por abscisa -->
+          <div v-if="abscisaPoints.length" class="abscisa-points-list">
+            <div v-for="p in abscisaPoints" :key="p.id" class="abs-point-card">
+              <div class="abs-point-info">
+                <span class="abs-point-pk">{{ p.formatted }}</span>
+                <span class="abs-point-road" :title="p.roadCode || p.roadName">{{ p.roadCode || p.roadName }}</span>
+              </div>
+              <div class="abs-point-actions">
+                <!-- Lupita (zoom) -->
+                <button class="abs-action-btn zoom" @click.stop.prevent="zoomPoint(p)" title="Hacer zoom al punto">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                  </svg>
+                </button>
+                <!-- Disquete (guardar) -->
+                <button class="abs-action-btn save" :class="{ saved: isAlreadySaved(p) }" :disabled="isAlreadySaved(p)" @click.stop.prevent="saveToProject(p)" title="Guardar punto en el proyecto">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+                    <polyline points="17 21 17 13 7 13 7 21"/>
+                    <polyline points="7 3 7 8 15 8"/>
+                  </svg>
+                </button>
+                <!-- Papelera (eliminar) -->
+                <button class="abs-action-btn delete" @click.stop.prevent="removeAbscisaPoint(p)" title="Eliminar de la lista">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="3 6 5 6 21 6"/>
+                    <path d="M19 6l-1 14H6L5 6"/>
+                    <path d="M10 11v6M14 11v6"/>
+                  </svg>
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       </template>
+
+      <!-- Illustrator Export List (Visible if there are selected roads) -->
+      <div v-if="exportStore.selectedRoads.length > 0" class="illustrator-list-section">
+        <div class="ils-header">
+          <span class="ils-title">Vías para Illustrator ({{ exportStore.selectedRoads.length }})</span>
+          <button class="ils-clear-btn" @click="exportStore.clear" title="Vaciar selección">
+            Limpiar
+          </button>
+        </div>
+        <div class="ils-items">
+          <div v-for="r in exportStore.selectedRoads" :key="r.id" class="ils-item">
+            <div class="ils-info">
+              <span class="ils-badge" :class="r.layerId"></span>
+              <span class="ils-name" :title="r.codigo ? `${r.codigo} - ${r.nombre}` : r.nombre">
+                {{ r.codigo || r.nombre }}
+              </span>
+            </div>
+            <button class="ils-remove-btn" @click="exportStore.removeRoad(r.id)" title="Quitar de la selección">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   </aside>
 </template>
@@ -152,15 +230,35 @@ import { ref, computed, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useQueryStore } from '../stores/queryStore'
 import { useQuery } from '../composables/useQuery'
-import { parsePK } from '../composables/useStationing'
+import { parsePK, getPointAtPK } from '../composables/useStationing'
+import { useCoordStore } from '../stores/coordStore'
+import { useCoords } from '../composables/useCoords'
+import { useMapStore } from '../stores/mapStore'
+import { useExportStore } from '../stores/exportStore'
 
 const queryStore = useQueryStore()
 const { result, error } = storeToRefs(queryStore)
 const { clearResults, queryByPK } = useQuery()
+const coordStore = useCoordStore()
+const { syncLayer } = useCoords()
+const mapStore = useMapStore()
+const exportStore = useExportStore()
+
+const isRoadInExport = computed(() => {
+  return exportStore.isRoadSelected(result.value)
+})
+
+function toggleExportRoad() {
+  if (result.value) {
+    exportStore.toggleRoad(result.value)
+  }
+}
 
 const pkInput = ref('')
 const pkError = ref('')
 const collapsed = ref(false)
+const abscisaPoints = ref([])
+const deletedMeters = ref(new Set())
 
 // Campos técnicos de ArcGIS que no aportan valor al usuario
 const SKIP_FIELDS = new Set(['OBJECTID', 'FID', 'GlobalID', 'Shape__Area',
@@ -188,12 +286,78 @@ watch([result, error], () => {
   collapsed.value = false
 })
 
+watch(result, (newRes, oldRes) => {
+  const newId = newRes?.codigo || newRes?.nombre
+  const oldId = oldRes?.codigo || oldRes?.nombre
+  if (newId !== oldId) {
+    abscisaPoints.value = []
+    deletedMeters.value.clear()
+  }
+
+  // Registrar automáticamente en la lista de abscisas cuando el resultado sea un punto en la vía
+  if (newRes && newRes.type === 'point' && newRes.snappedCoords) {
+    if (deletedMeters.value.has(newRes.pk)) return
+
+    const yaExiste = abscisaPoints.value.some(p => p.meters === newRes.pk)
+    if (!yaExiste) {
+      abscisaPoints.value.push({
+        id: `${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+        formatted: newRes.formatted,
+        meters: newRes.pk,
+        coords: newRes.snappedCoords,
+        name: `${newRes.nombre || newRes.codigo || 'Vía'} - ${newRes.formatted}`,
+        roadName: newRes.nombre || 'Vía sin nombre',
+        roadCode: newRes.codigo || '',
+        layerId: newRes.layerId
+      })
+    }
+  }
+}, { immediate: true })
+
 function close() {
   clearResults()
   pkInput.value = ''
   pkError.value = ''
+  abscisaPoints.value = []
+  deletedMeters.value.clear()
 }
 
+function zoomPoint(p) {
+  if (mapStore.instance && p.coords) {
+    mapStore.instance.flyTo({ center: p.coords, zoom: 16 })
+  }
+}
+
+function removeAbscisaPoint(p) {
+  abscisaPoints.value = abscisaPoints.value.filter(pt => pt.id !== p.id)
+  deletedMeters.value.add(p.meters)
+}
+
+function isAlreadySaved(p) {
+  return coordStore.points.some(pt => pt.lng === p.coords[0] && pt.lat === p.coords[1])
+}
+
+function saveToProject(p) {
+  if (isAlreadySaved(p)) return
+
+  const idx = coordStore.points.length + 1
+  coordStore.addPoint({
+    id: `${Date.now()}`,
+    idx,
+    name: p.name,
+    lng: p.coords[0],
+    lat: p.coords[1],
+    nearestRoad: {
+      nombre: p.roadName,
+      codigo: p.roadCode,
+      layerId: p.layerId,
+      abscisa: p.formatted,
+      distFromLine: 0
+    }
+  })
+
+  syncLayer()
+}
 
 function goPK() {
   pkError.value = ''
@@ -206,11 +370,33 @@ function goPK() {
   // Formatear automáticamente al presionar enter o el botón
   const km = Math.floor(meters / 1000)
   const m = Math.round(meters % 1000)
-  pkInput.value = `k${km}+${String(m).padStart(3, '0')}`
+  const formatted = `k${km}+${String(m).padStart(3, '0')}`
+  pkInput.value = formatted
 
   const cod = result.value?.codigo
   const nom = result.value?.nombre
   if (!cod && !nom) { pkError.value = 'Sin vía seleccionada'; return }
+
+  const chainedCoords = result.value?.chainedCoords
+  if (!chainedCoords) { pkError.value = 'Geometría de vía no disponible'; return }
+
+  const coords = getPointAtPK(meters, chainedCoords)
+  if (!coords) { pkError.value = 'La abscisa excede la longitud de la vía'; return }
+
+  const yaExiste = abscisaPoints.value.some(p => p.meters === meters)
+  if (!yaExiste) {
+    abscisaPoints.value.push({
+      id: `${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+      formatted,
+      meters,
+      coords,
+      name: `${nom || cod || 'Vía'} - ${formatted}`,
+      roadName: nom || 'Vía sin nombre',
+      roadCode: cod || '',
+      layerId: result.value?.layerId
+    })
+  }
+
   queryByPK(cod, nom, meters)
 }
 
@@ -453,6 +639,19 @@ function layerLabel(id) {
   color: #606080;
 }
 
+/* Animations */
+.fade-slide-up-enter-active,
+.fade-slide-up-leave-active {
+  transition: opacity 160ms cubic-bezier(0.23, 1, 0.32, 1),
+              transform 160ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.fade-slide-up-enter-from,
+.fade-slide-up-leave-to {
+  opacity: 0;
+  transform: translateY(4px);
+}
+
 /* Go-to-PK section */
 .pk-nav {
   border-top: 1px solid #eeeef8;
@@ -460,14 +659,8 @@ function layerLabel(id) {
   display: flex;
   flex-direction: column;
   gap: 8px;
-}
-
-.pk-nav-label {
-  font-size: 11px;
-  color: #7070a0;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.02em;
+  flex: 1;
+  min-height: 0;
 }
 
 .pk-nav-row {
@@ -534,16 +727,262 @@ function layerLabel(id) {
   margin-top: 2px;
 }
 
-/* Animations */
-.fade-slide-up-enter-active,
-.fade-slide-up-leave-active {
-  transition: opacity 160ms cubic-bezier(0.23, 1, 0.32, 1),
-              transform 160ms cubic-bezier(0.23, 1, 0.32, 1);
+.abscisa-points-list {
+  flex: 1;
+  overflow-y: auto;
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-right: 4px;
 }
 
-.fade-slide-up-enter-from,
-.fade-slide-up-leave-to {
-  opacity: 0;
-  transform: translateY(4px);
+.abs-point-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border: 1px solid #e8e8f4;
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: #fafaff;
+  gap: 8px;
+  transition: all 0.15s;
+}
+
+.abs-point-card:hover {
+  background: #f5f5fc;
+  border-color: #d1d1f0;
+}
+
+.abs-point-info {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+.abs-point-pk {
+  font-family: 'Courier New', monospace;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #3d5af1;
+}
+
+.abs-point-road {
+  font-size: 11px;
+  color: #7070a0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 1px;
+}
+
+.abs-point-actions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.abs-action-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: #7070a0;
+  cursor: pointer;
+  padding: 0;
+  transition: background 150ms, color 150ms, transform 100ms;
+}
+
+.abs-action-btn svg {
+  width: 13px;
+  height: 13px;
+}
+
+.abs-action-btn:active {
+  transform: scale(0.92);
+}
+
+.abs-action-btn.zoom:hover {
+  background: #eef2ff;
+  color: #3d5af1;
+}
+
+.abs-action-btn.save:hover {
+  background: #f0fdf4;
+  color: #16a34a;
+}
+
+.abs-action-btn.save.saved {
+  color: #16a34a;
+  background: #e8f5e9;
+  cursor: default;
+  pointer-events: none;
+}
+
+.abs-action-btn.delete:hover {
+  background: #fef2f2;
+  color: #dc2626;
+}
+
+/* Illustrator Toggle Styles */
+.illustrator-toggle-area {
+  padding: 8px 16px;
+  display: flex;
+  justify-content: center;
+}
+
+.illustrator-toggle-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  background: #f3e8ff;
+  border: 1px solid #c084fc;
+  color: #7e22ce;
+  transition: all 0.15s ease;
+}
+
+.illustrator-toggle-btn:hover {
+  background: #e9d5ff;
+  border-color: #a855f7;
+  color: #6b21a8;
+  box-shadow: 0 2px 8px rgba(168, 85, 247, 0.15);
+}
+
+.illustrator-toggle-btn.active {
+  background: #a855f7;
+  border-color: #9333ea;
+  color: #ffffff;
+}
+
+.illustrator-toggle-btn.active:hover {
+  background: #9333ea;
+  border-color: #7e22ce;
+  box-shadow: 0 2px 8px rgba(147, 51, 234, 0.3);
+}
+
+.ai-icon {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
+/* Illustrator List Section */
+.illustrator-list-section {
+  margin-top: auto;
+  border-top: 1px dashed #d8d8e8;
+  padding: 16px;
+  background: #faf8ff;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ils-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.ils-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: #6b21a8;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.ils-clear-btn {
+  background: none;
+  border: none;
+  font-size: 11px;
+  font-weight: 600;
+  color: #a855f7;
+  cursor: pointer;
+  padding: 2px 4px;
+  transition: color 0.12s;
+}
+
+.ils-clear-btn:hover {
+  color: #7e22ce;
+  text-decoration: underline;
+}
+
+.ils-items {
+  max-height: 140px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ils-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 8px;
+  background: #ffffff;
+  border: 1px solid #e9d5ff;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.ils-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.ils-badge {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.ils-badge.primaria { background-color: #dc2626; }
+.ils-badge.secundaria { background-color: #2563eb; }
+.ils-badge.terciaria { background-color: #16a34a; }
+
+.ils-name {
+  color: #374151;
+  font-weight: 550;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ils-remove-btn {
+  background: none;
+  border: none;
+  color: #9ca3af;
+  cursor: pointer;
+  padding: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  transition: all 0.12s;
+}
+
+.ils-remove-btn:hover {
+  color: #ef4444;
+  background: #fee2e2;
+}
+
+.ils-remove-btn svg {
+  width: 12px;
+  height: 12px;
 }
 </style>

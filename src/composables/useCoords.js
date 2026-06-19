@@ -47,6 +47,30 @@ export function useCoords() {
           }
         })
       }
+      // Optional label layer — shown when showLabels is not explicitly false
+      if (!map.getLayer(layerId + '-label')) {
+        const labelVisible = style.showLabels !== false ? visible : 'none'
+        map.addLayer({
+          id: layerId + '-label',
+          type: 'symbol',
+          source: layerId,
+          layout: {
+            'text-field': ['get', 'name'],
+            'text-font': ['Open Sans Regular', 'Arial Unicode MS Regular'],
+            'text-size': style.labelSize ?? 11,
+            'text-offset': [0, 1.0],
+            'text-anchor': 'top',
+            'text-allow-overlap': false,
+            'text-ignore-placement': false,
+            visibility: labelVisible
+          },
+          paint: {
+            'text-color': style.labelColor ?? '#2a2a4c',
+            'text-halo-color': '#ffffff',
+            'text-halo-width': 1.5
+          }
+        })
+      }
     } else if (geomType === 'line') {
       if (!map.getLayer(layerId + '-line')) {
         map.addLayer({

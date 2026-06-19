@@ -74,6 +74,30 @@ export const BASE_MAPS = [
     }
   },
   {
+    id: 'satellite',
+    label: 'Satelital',
+    style: {
+      version: 8,
+      sources: {
+        satellite: {
+          type: 'raster',
+          tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'],
+          tileSize: 256,
+          attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community',
+          maxzoom: 17
+        }
+      },
+      layers: [
+        {
+          id: 'satellite',
+          type: 'raster',
+          source: 'satellite'
+        }
+      ],
+      glyphs: 'https://fonts.openmaptiles.org/{fontstack}/{range}.pbf'
+    }
+  },
+  {
     id: 'none',
     label: 'Sin mapa base',
     style: {

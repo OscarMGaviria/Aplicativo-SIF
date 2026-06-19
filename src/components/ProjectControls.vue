@@ -39,6 +39,13 @@
             </svg>
             KMZ
           </button>
+          <button class="export-item" @click="onExportIllustrator">
+            <!-- Adobe Illustrator themed vector icon (cube/layers layout) -->
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
+            </svg>
+            Adobe Illustrator
+          </button>
         </div>
       </transition>
     </div>
@@ -81,8 +88,12 @@
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue'
 import { useProject } from '../composables/useProject'
+import { useExport } from '../composables/useExport'
+import { useExportStore } from '../stores/exportStore'
 
-const { saveProject, loadProject, exportGeoJSON, exportKMZ } = useProject()
+const { saveProject, loadProject } = useProject()
+const { exportToIllustrator, exportToGeoJSON, exportToKMZ } = useExport()
+const exportStore = useExportStore()
 
 const showModal     = ref(false)
 const modalTitle    = ref('')
@@ -119,17 +130,43 @@ async function onFileChange(e) {
 
 function onExportGeoJSON() {
   exportMenuOpen.value = false
-  exportGeoJSON()
+  if (exportStore.selectedRoads.length === 0) {
+    showError(
+      'Sin vías seleccionadas',
+      'No has seleccionado ninguna vía para exportar. Por favor, busca o haz clic en alguna vía en el mapa y agrégala con el botón "Añadir a Illustrator" antes de exportar.'
+    )
+    return
+  }
+  exportToGeoJSON()
 }
 
 async function onExportKMZ() {
   exportMenuOpen.value = false
+  if (exportStore.selectedRoads.length === 0) {
+    showError(
+      'Sin vías seleccionadas',
+      'No has seleccionado ninguna vía para exportar. Por favor, busca o haz clic en alguna vía en el mapa y agrégala con el botón "Añadir a Illustrator" antes de exportar.'
+    )
+    return
+  }
   try {
-    await exportKMZ()
+    await exportToKMZ()
   } catch (err) {
     console.error(err)
     showError('Error al exportar', `No se pudo generar el KMZ: ${err.message}`)
   }
+}
+
+function onExportIllustrator() {
+  exportMenuOpen.value = false
+  if (exportStore.selectedRoads.length === 0) {
+    showError(
+      'Sin vías seleccionadas',
+      'No has seleccionado ninguna vía para exportar. Por favor, busca o haz clic en alguna vía en el mapa y agrégala con el botón "Añadir a Illustrator" antes de exportar.'
+    )
+    return
+  }
+  exportToIllustrator()
 }
 
 function onClickOutside(e) {
