@@ -71,7 +71,10 @@ export function useLayers() {
   async function loadAllLayers() {
     const map = mapStore.instance
     if (!map) return
-    layerStore.resetLoaded()
+    const isInitial = LAYERS.some(l => !layerStore._cache[l.id])
+    if (isInitial) {
+      layerStore.resetLoaded()
+    }
     for (const layer of LAYERS) {
       await _loadLayer(map, layer)
     }

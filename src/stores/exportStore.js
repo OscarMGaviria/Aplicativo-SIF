@@ -19,7 +19,8 @@ export const useExportStore = defineStore('export', () => {
         nombre: road.nombre || '',
         layerId: road.layerId || 'terciaria',
         chainedCoords: road.chainedCoords,
-        totalKm: road.totalKm || 0
+        totalKm: road.totalKm || 0,
+        properties: road.properties || {}
       })
     }
   }

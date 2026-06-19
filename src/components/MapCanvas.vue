@@ -28,6 +28,7 @@ const { addPanelControls } = useMapControls()
 
 let map = null
 let hoverPopup = null
+let activePopupType = null // 'road' | 'muni' | null
 
 onMounted(() => {
   map = initMap(mapEl.value, async () => {
@@ -66,18 +67,32 @@ onMounted(() => {
       map.getCanvas().style.cursor = 'crosshair'
       updateHover(null)
       hoverPopup?.remove()
+      activePopupType = null
       return
     }
-    const layers = ROAD_LAYER_IDS.filter(id => map.getLayer(id))
-    if (!layers.length) return
-    const features = map.queryRenderedFeatures(e.point, { layers })
-    map.getCanvas().style.cursor = features.length ? 'pointer' : ''
-    updateHover(features[0] ?? null)
 
-    if (features.length) {
-      const props = features[0].properties
+    const roadLayers = ROAD_LAYER_IDS.filter(id => map.getLayer(id))
+    let roadFeatures = []
+    if (roadLayers.length) {
+      roadFeatures = map.queryRenderedFeatures(e.point, { layers: roadLayers })
+    }
+
+    if (roadFeatures.length) {
+      // Hovering over a road -> show hand cursor & road tooltip
+      map.getCanvas().style.cursor = 'pointer'
+      const road = roadFeatures[0]
+      updateHover(road)
+
+      const props = road.properties
       const nombre = props.NOMBRE_VIA || ''
       const codigo = props.CODIGO_VIA || ''
+
+      if (hoverPopup && activePopupType !== 'road') {
+        hoverPopup.remove()
+        hoverPopup = null
+      }
+      activePopupType = 'road'
+
       if (!hoverPopup) {
         hoverPopup = new maplibregl.Popup({
           closeButton: false, closeOnClick: false,
@@ -89,14 +104,56 @@ onMounted(() => {
         .setHTML(`${codigo ? `<span class="rht-code">${codigo}</span>` : ''}<span class="rht-name">${nombre}</span>`)
         .addTo(map)
     } else {
-      hoverPopup?.remove()
-      hoverPopup = null
+      // Not over a road
+      updateHover(null)
+
+      let muniFeatures = []
+      if (map.getLayer('municipios-fill')) {
+        muniFeatures = map.queryRenderedFeatures(e.point, { layers: ['municipios-fill'] })
+      }
+
+      if (muniFeatures.length) {
+        // Hovering over a municipality -> standard pointer & muni tooltip
+        map.getCanvas().style.cursor = ''
+        const muni = muniFeatures[0]
+        const name = muni.properties.MPIO_NOMBR || ''
+        const subregion = muni.properties.SUBREGION || ''
+
+        if (hoverPopup && activePopupType !== 'muni') {
+          hoverPopup.remove()
+          hoverPopup = null
+        }
+        activePopupType = 'muni'
+
+        if (!hoverPopup) {
+          hoverPopup = new maplibregl.Popup({
+            closeButton: false, closeOnClick: false,
+            anchor: 'bottom', offset: [0, -6],
+            className: 'muni-hover-tooltip'
+          })
+        }
+        hoverPopup.setLngLat(e.lngLat)
+          .setHTML(`
+            <div class="muni-tooltip-content">
+              <span class="muni-title">${name}</span>
+              <span class="muni-subregion">${subregion}</span>
+            </div>
+          `)
+          .addTo(map)
+      } else {
+        // Neither road nor municipality
+        map.getCanvas().style.cursor = ''
+        hoverPopup?.remove()
+        hoverPopup = null
+        activePopupType = null
+      }
     }
   })
 
   map.on('mouseleave', () => {
     hoverPopup?.remove()
     hoverPopup = null
+    activePopupType = null
   })
 })
 

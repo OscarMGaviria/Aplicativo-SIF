@@ -129,3 +129,57 @@ html, body, #app {
   white-space: normal;
   line-height: 1.35;
 }
+
+/* Tooltip de municipio al pasar el cursor por encima */
+.muni-hover-tooltip .maplibregl-popup-content {
+  background: rgba(12, 28, 22, 0.93);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(16, 185, 129, 0.2);
+  border-radius: 8px;
+  padding: 6px 12px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  pointer-events: none;
+  max-width: 280px;
+}
+
+.muni-hover-tooltip .maplibregl-popup-tip {
+  border-top-color: rgba(12, 28, 22, 0.93);
+}
+
+.muni-hover-tooltip.maplibregl-popup {
+  pointer-events: none;
+}
+
+.muni-tooltip-content {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.muni-title {
+  display: block;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #ffffff;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.muni-subregion {
+  display: block;
+  font-size: 9.5px;
+  font-weight: 600;
+  color: #10b981;
+  letter-spacing: 0.04em;
+}
+
+/* Sobrescribir el cursor de mano de arrastre (grab) por defecto en el mapa */
+.maplibregl-canvas {
+  cursor: default;
+}
+.maplibregl-canvas:active {
+  cursor: default;
+}

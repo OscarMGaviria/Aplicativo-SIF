@@ -328,7 +328,7 @@ export function useQuery() {
     const segs = _getSegments(codigo, nombre)
     const chainedCoords = (segs.length > 0 ? chainSegments(segs) : null)
       ?? chainSegments([feature])
-    return { codigo, nombre, municipio, competente, orden, chainedCoords, totalKm: getTotalLengthKm(chainedCoords) }
+    return { codigo, nombre, municipio, competente, orden, chainedCoords, totalKm: getTotalLengthKm(chainedCoords), properties: props }
   }
 
   function queryByCoords(lng, lat) {
@@ -382,11 +382,13 @@ export function useQuery() {
     mapStore.instance?.fitBounds(bbox, { padding: 100, maxZoom: 16, duration: 800 })
     if (mapStore.instance) _showRoadPopup(mapStore.instance, abs.snappedCoords, abs.formatted)
 
+    const roadInfo = _buildRoad(best, best.layerId)
     queryStore.setResult({
       type: 'point', pk: abs.pk, formatted: abs.formatted,
       snappedCoords: abs.snappedCoords, distFromLine: abs.distFromLine,
       coordPoint: [lng, lat],
-      nombre, codigo, municipio, competente, orden, layerId: best.layerId, totalKm, chainedCoords
+      ...roadInfo,
+      layerId: best.layerId
     })
   }
 
@@ -422,7 +424,8 @@ export function useQuery() {
       layerId,
       segmentCount: segs.length,
       totalKm,
-      chainedCoords
+      chainedCoords,
+      properties: props
     })
   }
 
@@ -562,7 +565,8 @@ export function useQuery() {
           orden: activeRoad.orden !== undefined ? activeRoad.orden : '',
           layerId: activeRoad.layerId,
           totalKm: activeRoad.totalKm,
-          chainedCoords: activeRoad.chainedCoords
+          chainedCoords: activeRoad.chainedCoords,
+          properties: activeRoad.properties || {}
         })
         return
       }
@@ -596,10 +600,12 @@ export function useQuery() {
     map.fitBounds(bbox, { padding: 80, maxZoom: 14, duration: 800 })
     _showRoadPopup(map, abs.snappedCoords, abs.formatted)
 
+    const roadInfo = _buildRoad(best, layerId)
     queryStore.setResult({
       type: 'point', pk: abs.pk, formatted: abs.formatted,
       snappedCoords: abs.snappedCoords, distFromLine: abs.distFromLine,
-      nombre, codigo, municipio, competente, orden, layerId, totalKm, chainedCoords
+      ...roadInfo,
+      layerId
     })
   }
 

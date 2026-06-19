@@ -90,10 +90,12 @@ import { ref, onMounted, onUnmounted } from 'vue'
 import { useProject } from '../composables/useProject'
 import { useExport } from '../composables/useExport'
 import { useExportStore } from '../stores/exportStore'
+import { useCoordStore } from '../stores/coordStore'
 
 const { saveProject, loadProject } = useProject()
 const { exportToIllustrator, exportToGeoJSON, exportToKMZ } = useExport()
 const exportStore = useExportStore()
+const coordStore = useCoordStore()
 
 const showModal     = ref(false)
 const modalTitle    = ref('')
@@ -130,10 +132,10 @@ async function onFileChange(e) {
 
 function onExportGeoJSON() {
   exportMenuOpen.value = false
-  if (exportStore.selectedRoads.length === 0) {
+  if (exportStore.selectedRoads.length === 0 && coordStore.points.length === 0) {
     showError(
-      'Sin vías seleccionadas',
-      'No has seleccionado ninguna vía para exportar. Por favor, busca o haz clic en alguna vía en el mapa y agrégala con el botón "Añadir a Illustrator" antes de exportar.'
+      'Sin elementos seleccionados',
+      'No tienes vías seleccionadas ni puntos creados para exportar. Por favor, añade vías a la selección o crea puntos en el mapa antes de exportar.'
     )
     return
   }
