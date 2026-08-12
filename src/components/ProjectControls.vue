@@ -144,10 +144,10 @@ function onExportGeoJSON() {
 
 async function onExportKMZ() {
   exportMenuOpen.value = false
-  if (exportStore.selectedRoads.length === 0) {
+  if (exportStore.selectedRoads.length === 0 && coordStore.points.length === 0) {
     showError(
-      'Sin vías seleccionadas',
-      'No has seleccionado ninguna vía para exportar. Por favor, busca o haz clic en alguna vía en el mapa y agrégala con el botón "Añadir a Illustrator" antes de exportar.'
+      'Sin elementos seleccionados',
+      'No tienes vías seleccionadas ni puntos creados para exportar. Por favor, añade vías a la selección (botón "Añadir a exportación" en el panel de resultados) o crea puntos en el mapa antes de exportar.'
     )
     return
   }
@@ -164,7 +164,7 @@ function onExportIllustrator() {
   if (exportStore.selectedRoads.length === 0) {
     showError(
       'Sin vías seleccionadas',
-      'No has seleccionado ninguna vía para exportar. Por favor, busca o haz clic en alguna vía en el mapa y agrégala con el botón "Añadir a Illustrator" antes de exportar.'
+      'No has seleccionado ninguna vía para exportar. Por favor, busca o haz clic en alguna vía en el mapa y agrégala con el botón "Añadir a exportación" en el panel de resultados antes de exportar.'
     )
     return
   }

@@ -40,6 +40,15 @@
               <circle cx="12" cy="9" r="2.5"/>
             </svg>
           </button>
+          <button class="icon-btn copy" @click="copyPointCoords(p)" title="Copiar coordenadas">
+            <svg v-if="copiedId !== p.id" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="9" y="9" width="13" height="13" rx="2"/>
+              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+            </svg>
+            <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <polyline points="20 6 9 17 4 12"/>
+            </svg>
+          </button>
           <button class="icon-btn del" @click="removePoint(p.id)" title="Eliminar punto">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <polyline points="3 6 5 6 21 6"/>
@@ -50,7 +59,14 @@
         </div>
 
         <div class="point-coords">
-          {{ p.lat.toFixed(6) }}, {{ p.lng.toFixed(6) }}
+          <div class="coord-line">
+            <span class="coord-tag">WGS84</span>
+            <span>{{ p.lat.toFixed(6) }}, {{ p.lng.toFixed(6) }}</span>
+          </div>
+          <div class="coord-line">
+            <span class="coord-tag">MAGNA-SIRGAS</span>
+            <span>N {{ magnaSirgas(p).y.toFixed(2) }}, E {{ magnaSirgas(p).x.toFixed(2) }}</span>
+          </div>
         </div>
 
         <div v-if="p.nearestRoad" class="point-road">
@@ -72,13 +88,32 @@
 </template>
 
 <script setup>
-import { onUnmounted } from 'vue'
+import { onUnmounted, ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useCoordStore } from '../stores/coordStore'
 import { useCoords } from '../composables/useCoords'
 import { useLayerStore } from '../stores/layerStore'
+import { toMagnaSirgasOrigenNacional, copyCoordsToClipboard } from '../composables/useProjection'
 
 const layerStore = useLayerStore()
+
+function magnaSirgas(p) {
+  return toMagnaSirgasOrigenNacional(p.lng, p.lat)
+}
+
+const copiedId = ref(null)
+let copiedTimeout = null
+
+async function copyPointCoords(p) {
+  try {
+    await copyCoordsToClipboard(p.lng, p.lat)
+    copiedId.value = p.id
+    clearTimeout(copiedTimeout)
+    copiedTimeout = setTimeout(() => { copiedId.value = null }, 1500)
+  } catch (err) {
+    console.warn('[CoordsPanel] No se pudo copiar al portapapeles:', err)
+  }
+}
 
 function isPointHidden(p) {
   return p.layerId && layerStore.visibility[p.layerId] === false
@@ -243,13 +278,35 @@ onUnmounted(() => {
 .icon-btn.fly { background: none; color: #6060a0; }
 .icon-btn.fly:hover { background: #ededf8; color: #7c3aed; }
 
+.icon-btn.copy { background: none; color: #6060a0; }
+.icon-btn.copy:hover { background: #ededf8; color: #16a34a; }
+
 .icon-btn.del { background: none; color: #9090b0; }
 .icon-btn.del:hover { background: #fff0f0; color: #dc2626; }
 
 .point-coords {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
   font-size: 11px;
   color: #7070a0;
   font-family: 'Courier New', monospace;
+}
+
+.coord-line {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+}
+
+.coord-tag {
+  flex-shrink: 0;
+  font-family: system-ui, sans-serif;
+  font-size: 9px;
+  font-weight: 700;
+  color: #a0a0c8;
+  letter-spacing: 0.02em;
+  min-width: 62px;
 }
 
 .point-road {

@@ -3,11 +3,11 @@ import maplibregl from 'maplibre-gl'
 import { useMapStore } from '../stores/mapStore'
 import { useLayerStore } from '../stores/layerStore'
 import { useQueryStore } from '../stores/queryStore'
-import { usePhotoStore } from '../stores/photoStore'
 import {
   chainSegments, getAbscissaAtPoint, getPointAtPK,
-  getTotalLengthKm, formatPK
+  getTotalLengthKm
 } from './useStationing'
+import { formatPK } from '../utils/formatters'
 
 const ROAD_LAYER_IDS = ['primaria', 'secundaria', 'terciaria']
 const EMPTY_FC = { type: 'FeatureCollection', features: [] }
@@ -326,9 +326,18 @@ export function useQuery() {
     const competente = _competente(layerId, props.COMPETENTE)
     const orden = props.ORDEN !== undefined ? props.ORDEN : ''
     const segs = _getSegments(codigo, nombre)
-    const chainedCoords = (segs.length > 0 ? chainSegments(segs) : null)
-      ?? chainSegments([feature])
-    return { codigo, nombre, municipio, competente, orden, chainedCoords, totalKm: getTotalLengthKm(chainedCoords), properties: props }
+    let chainedCoords = null
+    let warnings = []
+    if (segs.length > 0) {
+      const res = chainSegments(segs)
+      chainedCoords = res.chain
+      warnings = res.warnings
+    } else {
+      const res = chainSegments([feature])
+      chainedCoords = res.chain
+      warnings = res.warnings
+    }
+    return { codigo, nombre, municipio, competente, orden, chainedCoords, warnings, totalKm: getTotalLengthKm(chainedCoords), properties: props }
   }
 
   function queryByCoords(lng, lat) {
@@ -399,7 +408,7 @@ export function useQuery() {
       return queryStore.setError(`No se encontró la vía: "${termLabel}"`)
     }
 
-    const chainedCoords = chainSegments(segs)
+    const { chain: chainedCoords, warnings } = chainSegments(segs)
     const props = segs[0].properties
     const totalKm = getTotalLengthKm(chainedCoords)
     const layerId = ROAD_LAYER_IDS.find(id => layerStore._cache[id]?.features.includes(segs[0])) || 'terciaria'
@@ -425,7 +434,8 @@ export function useQuery() {
       segmentCount: segs.length,
       totalKm,
       chainedCoords,
-      properties: props
+      properties: props,
+      warnings
     })
   }
 
@@ -445,7 +455,7 @@ export function useQuery() {
       return queryStore.setError(`No se encontró la vía: "${termLabel}"`)
     }
 
-    const chainedCoords = chainSegments(segs)
+    const { chain: chainedCoords, warnings } = chainSegments(segs)
     const totalKm = getTotalLengthKm(chainedCoords)
     const coords = getPointAtPK(pk, chainedCoords)
 
@@ -464,7 +474,7 @@ export function useQuery() {
     queryStore.setResult({
       type: 'point', pk, formatted: formatPK(pk),
       snappedCoords: coords, nombre: props.NOMBRE_VIA || '', codigo: props.CODIGO_VIA || '',
-      competente, orden, layerId: pkLayerId, totalKm, chainedCoords
+      competente, orden, layerId: pkLayerId, totalKm, chainedCoords, warnings
     })
   }
 
@@ -474,34 +484,6 @@ export function useQuery() {
     if (!map) return
 
     const { x, y } = event.point
-    const photoStore = usePhotoStore()
-
-    // Fotos de eje de vía: cluster → zoom in; punto individual → abrir modal de foto
-    if (map.getLayer('foto-vias-clusters')) {
-      const clusterHits = map.queryRenderedFeatures([[x - 14, y - 14], [x + 14, y + 14]], {
-        layers: ['foto-vias-clusters']
-      })
-      if (clusterHits.length > 0) {
-        const clusterId = clusterHits[0].properties.cluster_id
-        const source = map.getSource('foto-vias')
-        if (source?.getClusterExpansionZoom) {
-          source.getClusterExpansionZoom(clusterId, (err, zoom) => {
-            if (err) return
-            map.easeTo({ center: clusterHits[0].geometry.coordinates, zoom: zoom + 0.5, duration: 500 })
-          })
-        }
-        return
-      }
-    }
-    if (map.getLayer('foto-vias')) {
-      const fotoHits = map.queryRenderedFeatures([[x - 14, y - 14], [x + 14, y + 14]], {
-        layers: ['foto-vias']
-      })
-      if (fotoHits.length > 0) {
-        photoStore.openFeature(fotoHits[0])
-        return
-      }
-    }
 
     // Canteras (puntos): máxima prioridad — click preciso sobre el ícono
     if (map.getLayer('canteras')) {

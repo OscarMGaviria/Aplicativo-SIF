@@ -11,14 +11,6 @@ const ICON_SVGS = {
     <rect x="5.5" y="7.5" width="8" height="4.5" rx="1" fill="#ffffff" transform="rotate(-45 9.5 9.75)"/>
     <line x1="10" y1="22" x2="22" y2="10" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round"/>
     <path d="M20 8 L25 10 L23 15 L19 13 Z" fill="#ffffff"/>
-  </svg>`,
-  'foto-vias-icon': `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
-    <circle cx="16" cy="16" r="15" fill="#8b5cf6" stroke="#ffffff" stroke-width="1.5"/>
-    <rect x="7" y="12" width="18" height="12" rx="2" fill="#ffffff" opacity="0.92"/>
-    <path d="M13 10.5 L14.5 8 L17.5 8 L19 10.5 Z" fill="#ffffff" opacity="0.92"/>
-    <circle cx="16" cy="18" r="4" fill="#8b5cf6"/>
-    <circle cx="16" cy="18" r="2.3" fill="#ffffff" opacity="0.55"/>
-    <circle cx="21.5" cy="13.5" r="1.1" fill="#fbbf24"/>
   </svg>`
 }
 
@@ -34,39 +26,10 @@ function _loadSvgImage(map, name) {
   })
 }
 
-// Fetch a single page from an ArcGIS GeoJSON endpoint with resultOffset pagination
-async function _fetchArcGISPage(baseUrl, offset, pageSize) {
-  const url = `${baseUrl}&resultOffset=${offset}&resultRecordCount=${pageSize}`
-  const res = await fetch(url)
-  const data = await res.json()
-  return data.features || []
-}
-
 export function useLayers() {
   const mapStore = useMapStore()
   const layerStore = useLayerStore()
   const coordStore = useCoordStore()
-
-  // Loads additional pages in the background and incrementally updates the map source
-  async function _loadMorePages(map, layer, allFeatures, offset) {
-    const PAGE = 2000
-    while (true) {
-      try {
-        const page = await _fetchArcGISPage(layer.file, offset, PAGE)
-        if (!page.length) break
-        allFeatures.push(...page)
-        const updated = markRaw({ type: 'FeatureCollection', features: allFeatures })
-        layerStore._cache[layer.id] = updated
-        const src = map.getSource(layer.id)
-        if (src) src.setData(updated)
-        if (page.length < PAGE) break
-        offset += PAGE
-      } catch (err) {
-        console.warn('[useLayers] Pagination error for', layer.id, err)
-        break
-      }
-    }
-  }
 
   async function loadAllLayers() {
     const map = mapStore.instance
@@ -75,28 +38,22 @@ export function useLayers() {
     if (isInitial) {
       layerStore.resetLoaded()
     }
-    for (const layer of LAYERS) {
-      await _loadLayer(map, layer)
-    }
+    // Load all layers concurrently
+    await Promise.all(LAYERS.map(layer => _loadLayer(map, layer)))
   }
 
   async function _loadLayer(map, layer) {
     try {
       if (!layerStore._cache[layer.id]) {
-        if (layer.paginate) {
-          // Load first page synchronously so the map shows data immediately,
-          // then stream remaining pages in the background.
-          const PAGE = 2000
-          const firstPage = await _fetchArcGISPage(layer.file, 0, PAGE)
-          const allFeatures = [...firstPage]
-          layerStore._cache[layer.id] = markRaw({ type: 'FeatureCollection', features: allFeatures })
-
-          if (firstPage.length >= PAGE) {
-            await _loadMorePages(map, layer, allFeatures, PAGE)
-          }
-        } else {
-          const res = await fetch(layer.file)
+        // Usar Promise.race con un timeout de 15 segundos para evitar bloqueos infinitos
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => controller.abort(), 15000)
+        
+        try {
+          const res = await fetch(layer.file, { signal: controller.signal })
           layerStore._cache[layer.id] = markRaw(await res.json())
+        } finally {
+          clearTimeout(timeoutId)
         }
       }
 
@@ -107,60 +64,7 @@ export function useLayers() {
         map.addSource(layer.id, { type: 'geojson', data })
       }
 
-      if (layer.type === 'cluster') {
-        // GeoJSON source with clustering enabled
-        if (!map.getSource(layer.id)) {
-          map.addSource(layer.id, {
-            type: 'geojson', data,
-            cluster: true,
-            clusterMaxZoom: layer.clusterMaxZoom ?? 14,
-            clusterRadius: 40
-          })
-        }
-        const clusterColor = layer.clusterColor || '#8b5cf6'
-        // Cluster bubble
-        if (!map.getLayer(layer.id + '-clusters')) {
-          map.addLayer({
-            id: layer.id + '-clusters', type: 'circle', source: layer.id,
-            filter: ['has', 'point_count'],
-            layout: { visibility: visible },
-            paint: {
-              'circle-color': clusterColor,
-              'circle-radius': ['step', ['get', 'point_count'], 14, 20, 18, 100, 22],
-              'circle-stroke-width': 2, 'circle-stroke-color': '#ffffff'
-            }
-          })
-        }
-        // Cluster count label
-        if (!map.getLayer(layer.id + '-cluster-count')) {
-          map.addLayer({
-            id: layer.id + '-cluster-count', type: 'symbol', source: layer.id,
-            filter: ['has', 'point_count'],
-            layout: {
-              'text-field': '{point_count_abbreviated}',
-              'text-size': 11,
-              'text-font': ['Open Sans Bold', 'Arial Unicode MS Bold'],
-              visibility: visible
-            },
-            paint: { 'text-color': '#ffffff' }
-          })
-        }
-        // Individual unclustered points
-        if (layer.iconImage) await _loadSvgImage(map, layer.iconImage)
-        if (!map.getLayer(layer.id)) {
-          map.addLayer({
-            id: layer.id, type: 'symbol', source: layer.id,
-            filter: ['!', ['has', 'point_count']],
-            layout: {
-              'icon-image': layer.iconImage || '',
-              'icon-size': layer.iconSize || 1,
-              'icon-allow-overlap': true,
-              'icon-ignore-placement': false,
-              visibility: visible
-            }
-          })
-        }
-      } else if (layer.type === 'line') {
+      if (layer.type === 'line') {
         if (!map.getLayer(layer.id)) {
           map.addLayer({
             id: layer.id, type: 'line', source: layer.id,
@@ -212,9 +116,11 @@ export function useLayers() {
         }
       }
 
-      layerStore.loaded[layer.id] = true
     } catch (err) {
       console.error(`Error cargando capa ${layer.id}:`, err)
+    } finally {
+      // Siempre marcar como cargada para evitar bloquear la UI
+      layerStore.loaded[layer.id] = true
     }
   }
 
@@ -227,14 +133,6 @@ export function useLayers() {
     if (id === 'municipios') {
       if (map.getLayer(id + '-fill')) map.setLayoutProperty(id + '-fill', 'visibility', v)
       if (map.getLayer(id + '-line')) map.setLayoutProperty(id + '-line', 'visibility', v)
-      return
-    }
-
-    // Clustered layers: toggle all three sublayers together
-    if (map.getLayer(id + '-clusters')) {
-      map.setLayoutProperty(id + '-clusters', 'visibility', v)
-      if (map.getLayer(id + '-cluster-count')) map.setLayoutProperty(id + '-cluster-count', 'visibility', v)
-      if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', v)
       return
     }
 

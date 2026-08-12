@@ -35,33 +35,56 @@ function ptDist(a, b) {
 // Orders and chains multiple LineString/MultiLineString features into a single coordinate array
 // following geographic continuity (no ORDEN field dependency)
 export function chainSegments(features) {
-  if (features.length === 0) return null
+  if (features.length === 0) return { chain: null, warnings: [] }
+  const warnings = []
 
   // Flatten any MultiLineStrings or LineStrings into individual LineString coordinate arrays
   const segs = []
   for (const f of features) {
     if (!f.geometry) continue
+    const orden = f.properties && f.properties.ORDEN !== undefined ? Number(f.properties.ORDEN) : null
+    
     if (f.geometry.type === 'MultiLineString') {
       for (const line of f.geometry.coordinates) {
         if (line && line.length > 0) {
-          segs.push({
-            coords: c2(line),
-            used: false
-          })
+          segs.push({ coords: c2(line), used: false, orden })
         }
       }
     } else if (f.geometry.type === 'LineString') {
       if (f.geometry.coordinates && f.geometry.coordinates.length > 0) {
-        segs.push({
-          coords: c2(f.geometry.coordinates),
-          used: false
-        })
+        segs.push({ coords: c2(f.geometry.coordinates), used: false, orden })
       }
     }
   }
 
-  if (segs.length === 0) return null
-  if (segs.length === 1) return segs[0].coords
+  if (segs.length === 0) return { chain: null, warnings: [] }
+  if (segs.length === 1) return { chain: segs[0].coords, warnings: [] }
+
+  const hasOrden = segs.every(s => s.orden !== null && !isNaN(s.orden))
+  
+  if (hasOrden) {
+    segs.sort((a, b) => a.orden - b.orden)
+    let chain = [...segs[0].coords]
+    for (let i = 1; i < segs.length; i++) {
+      const prevEnd = chain[chain.length - 1]
+      const nextStart = segs[i].coords[0]
+      const nextEnd = segs[i].coords[segs[i].coords.length - 1]
+      
+      const dStart = ptDist(prevEnd, nextStart)
+      const dEnd = ptDist(prevEnd, nextEnd)
+      
+      if (dStart <= dEnd) {
+        if (dStart > CONNECT_TOLERANCE_KM) warnings.push(`Hueco detectado (${(dStart * 1000).toFixed(0)}m) cerca del tramo ${segs[i].orden}.`)
+        chain = [...chain, ...segs[i].coords.slice(1)]
+      } else {
+        if (dEnd > CONNECT_TOLERANCE_KM) warnings.push(`Hueco detectado (${(dEnd * 1000).toFixed(0)}m) cerca del tramo ${segs[i].orden}.`)
+        chain = [...chain, ...[...segs[i].coords].reverse().slice(1)]
+      }
+    }
+    return { chain, warnings }
+  }
+
+  warnings.push("La vía no tiene campo ORDEN continuo. El trazado se calculó por proximidad y podría ser impreciso.")
 
   // Find starting segment: its start point is not the end of any other segment
   function findStart() {
@@ -91,21 +114,34 @@ export function chainSegments(features) {
     const lastPt = chain[chain.length - 1]
     let bestSeg = null, bestDist = Infinity, bestReverse = false
 
+    let candidates = 0
     for (const seg of segs) {
       if (seg.used) continue
       const dStart = ptDist(lastPt, seg.coords[0])
       const dEnd = ptDist(lastPt, seg.coords[seg.coords.length - 1])
+      
+      const minDist = Math.min(dStart, dEnd)
+      if (minDist < CONNECT_TOLERANCE_KM) candidates++
+
       if (dStart < bestDist) { bestDist = dStart; bestSeg = seg; bestReverse = false }
       if (dEnd < bestDist) { bestDist = dEnd; bestSeg = seg; bestReverse = true }
     }
 
     if (!bestSeg) break
+    
+    if (candidates > 1) {
+      warnings.push("Bifurcación ambigua detectada durante el encadenamiento.")
+    } else if (bestDist > CONNECT_TOLERANCE_KM) {
+      warnings.push(`Truncado: El siguiente segmento está a ${(bestDist * 1000).toFixed(0)}m (>100m).`)
+      break
+    }
+
     bestSeg.used = true
     const coords = bestReverse ? [...bestSeg.coords].reverse() : bestSeg.coords
     chain = [...chain, ...coords.slice(1)]
   }
 
-  return chain
+  return { chain, warnings }
 }
 
 export function getAbscissaAtPoint(lng, lat, chainedCoords) {

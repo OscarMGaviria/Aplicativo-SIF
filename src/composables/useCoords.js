@@ -234,7 +234,7 @@ export function useCoords() {
 
     if (!segs.length) return null
 
-    const chainedCoords = chainSegments(segs)
+    const { chain: chainedCoords } = chainSegments(segs)
     if (!chainedCoords) return null
     const abs = getAbscissaAtPoint(lng, lat, chainedCoords)
 
@@ -247,28 +247,32 @@ export function useCoords() {
   }
 
   function handleMapClick(event) {
-    if (!coordStore.addModeActive) return
-
-    const { lng, lat } = event.lngLat
-    const map = mapStore.instance
-    let nearestRoad = null
     try {
-      nearestRoad = map ? _findNearestRoad(lng, lat, map) : null
+      if (!coordStore.addModeActive) return
+
+      const { lng, lat } = event.lngLat
+      const map = mapStore.instance
+      let nearestRoad = null
+      try {
+        nearestRoad = map ? _findNearestRoad(lng, lat, map) : null
+      } catch (err) {
+        console.warn('[useCoords] nearestRoad lookup failed:', err)
+      }
+      const idx = coordStore.points.length + 1
+
+      coordStore.addPoint({
+        id: `${Date.now()}`,
+        idx,
+        name: `P${idx}`,
+        lng: parseFloat(lng.toFixed(6)),
+        lat: parseFloat(lat.toFixed(6)),
+        nearestRoad
+      })
+
+      syncLayer()
     } catch (err) {
-      console.warn('[useCoords] nearestRoad lookup failed:', err)
+      console.error('[useCoords] handleMapClick failed:', err)
     }
-    const idx = coordStore.points.length + 1
-
-    coordStore.addPoint({
-      id: `${Date.now()}`,
-      idx,
-      name: `P${idx}`,
-      lng: parseFloat(lng.toFixed(6)),
-      lat: parseFloat(lat.toFixed(6)),
-      nearestRoad
-    })
-
-    syncLayer()
   }
 
   function removePoint(id) {
@@ -413,3 +417,4 @@ export function useCoords() {
     addCustomMapLayer, _findNearestRoad
   }
 }
+

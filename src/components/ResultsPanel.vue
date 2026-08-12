@@ -20,7 +20,7 @@
     </div>
 
     <!-- Body -->
-    <div class="rp-body">
+    <div class="rp-body" ref="rpBodyRef">
       <!-- Empty state -->
       <div v-if="!result && !error" class="rp-empty">
         <svg class="empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
@@ -58,8 +58,22 @@
               <td class="rt-k">Longitud</td>
               <td class="rt-v mono text-subtle">{{ result.coords?.[0].toFixed(6) }}</td>
             </tr>
+            <tr v-if="canteraMagna">
+              <td class="rt-k">MAGNA-SIRGAS</td>
+              <td class="rt-v mono text-subtle">N {{ canteraMagna.y.toFixed(2) }}, E {{ canteraMagna.x.toFixed(2) }}</td>
+            </tr>
           </tbody>
         </table>
+        <button v-if="result.coords" class="copy-coords-btn" @click="copyCoords(result.coords, 'cantera')">
+          <svg v-if="copiedCoords !== 'cantera'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="9" y="9" width="13" height="13" rx="2"/>
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+          </svg>
+          <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <polyline points="20 6 9 17 4 12"/>
+          </svg>
+          {{ copiedCoords === 'cantera' ? 'Copiado' : 'Copiar coordenadas' }}
+        </button>
       </template>
 
       <template v-else-if="result">
@@ -116,6 +130,10 @@
                 <td class="rt-k">Longitud</td>
                 <td class="rt-v mono text-subtle">{{ result.snappedCoords?.[0].toFixed(6) }}</td>
               </tr>
+              <tr v-if="pointMagna">
+                <td class="rt-k">MAGNA-SIRGAS</td>
+                <td class="rt-v mono text-subtle">N {{ pointMagna.y.toFixed(2) }}, E {{ pointMagna.x.toFixed(2) }}</td>
+              </tr>
               <tr v-if="result.distFromLine != null">
                 <td class="rt-k">Distancia</td>
                 <td class="rt-v mono text-subtle">{{ (result.distFromLine * 1000).toFixed(1) }} m</td>
@@ -123,11 +141,33 @@
             </template>
           </tbody>
         </table>
+
+        <!-- Warnings -->
+        <div v-if="result.warnings && result.warnings.length > 0" class="rp-warnings">
+          <div v-for="(warn, i) in result.warnings" :key="'warn-'+i" class="rp-warning-item">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="rp-warning-icon">
+              <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+              <line x1="12" y1="9" x2="12" y2="13"/>
+              <line x1="12" y1="17" x2="12.01" y2="17"/>
+            </svg>
+            <span>{{ warn }}</span>
+          </div>
+        </div>
+        <button v-if="result.type === 'point' && result.snappedCoords" class="copy-coords-btn" @click="copyCoords(result.snappedCoords, 'point')">
+          <svg v-if="copiedCoords !== 'point'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="9" y="9" width="13" height="13" rx="2"/>
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+          </svg>
+          <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <polyline points="20 6 9 17 4 12"/>
+          </svg>
+          {{ copiedCoords === 'point' ? 'Copiado' : 'Copiar coordenadas' }}
+        </button>
  
-        <!-- Illustrator selection toggle -->
+        <!-- Export selection toggle (feeds both KMZ and Illustrator export) -->
         <div v-if="result.chainedCoords" class="illustrator-toggle-area">
-          <button 
-            class="illustrator-toggle-btn" 
+          <button
+            class="illustrator-toggle-btn"
             :class="{ active: isRoadInExport }"
             @click="toggleExportRoad"
           >
@@ -135,7 +175,7 @@
               <path v-if="isRoadInExport" d="M5 12h14" />
               <path v-else d="M12 5v14M5 12h14" />
             </svg>
-            {{ isRoadInExport ? 'Quitar de Illustrator' : 'Añadir a Illustrator' }}
+            {{ isRoadInExport ? 'Quitar de exportación' : 'Añadir a exportación (KMZ / Illustrator)' }}
           </button>
         </div>
 
@@ -163,7 +203,7 @@
 
           <!-- Lista local de puntos por abscisa -->
           <div v-if="abscisaPoints.length" class="abscisa-points-list">
-            <div v-for="p in abscisaPoints" :key="p.id" class="abs-point-card">
+            <div v-for="p in abscisaPoints" :key="p.id" class="abs-point-card" @click="selectAbscisaPoint(p)">
               <div class="abs-point-info">
                 <span class="abs-point-pk">{{ p.formatted }}</span>
                 <span class="abs-point-road" :title="p.roadCode || p.roadName">{{ p.roadCode || p.roadName }}</span>
@@ -197,10 +237,10 @@
         </div>
       </template>
 
-      <!-- Illustrator Export List (Visible if there are selected roads) -->
+      <!-- Export selection list (feeds both KMZ and Illustrator export) -->
       <div v-if="exportStore.selectedRoads.length > 0" class="illustrator-list-section">
         <div class="ils-header">
-          <span class="ils-title">Vías para Illustrator ({{ exportStore.selectedRoads.length }})</span>
+          <span class="ils-title">Vías para exportar ({{ exportStore.selectedRoads.length }})</span>
           <button class="ils-clear-btn" @click="exportStore.clear" title="Vaciar selección">
             Limpiar
           </button>
@@ -226,7 +266,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, nextTick } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useQueryStore } from '../stores/queryStore'
 import { useQuery } from '../composables/useQuery'
@@ -235,6 +275,7 @@ import { useCoordStore } from '../stores/coordStore'
 import { useCoords } from '../composables/useCoords'
 import { useMapStore } from '../stores/mapStore'
 import { useExportStore } from '../stores/exportStore'
+import { toMagnaSirgasOrigenNacional, copyCoordsToClipboard } from '../composables/useProjection'
 
 const queryStore = useQueryStore()
 const { result, error } = storeToRefs(queryStore)
@@ -254,11 +295,36 @@ function toggleExportRoad() {
   }
 }
 
+const ABSCISA_POINTS_KEY = 'abscisas_puntos_lista'
+
+function loadStoredAbscisaPoints() {
+  try {
+    const raw = localStorage.getItem(ABSCISA_POINTS_KEY)
+    return raw ? JSON.parse(raw) : []
+  } catch (err) {
+    console.warn('[ResultsPanel] No se pudo leer la lista guardada:', err)
+    return []
+  }
+}
+
+function pointKey(codigo, nombre, meters) {
+  return `${codigo || nombre || ''}|${meters}`
+}
+
 const pkInput = ref('')
 const pkError = ref('')
 const collapsed = ref(false)
-const abscisaPoints = ref([])
-const deletedMeters = ref(new Set())
+const abscisaPoints = ref(loadStoredAbscisaPoints())
+const deletedKeys = ref(new Set())
+const rpBodyRef = ref(null)
+
+watch(abscisaPoints, (val) => {
+  try {
+    localStorage.setItem(ABSCISA_POINTS_KEY, JSON.stringify(val))
+  } catch (err) {
+    console.warn('[ResultsPanel] No se pudo guardar la lista localmente:', err)
+  }
+}, { deep: true })
 
 // Campos técnicos de ArcGIS que no aportan valor al usuario
 const SKIP_FIELDS = new Set(['OBJECTID', 'FID', 'GlobalID', 'Shape__Area',
@@ -277,6 +343,32 @@ function formatKey(key) {
   return key.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase())
 }
 
+const canteraMagna = computed(() => {
+  const c = result.value?.coords
+  if (!c) return null
+  return toMagnaSirgasOrigenNacional(c[0], c[1])
+})
+
+const pointMagna = computed(() => {
+  const c = result.value?.snappedCoords
+  if (!c) return null
+  return toMagnaSirgasOrigenNacional(c[0], c[1])
+})
+
+const copiedCoords = ref(null)
+let copiedCoordsTimeout = null
+
+async function copyCoords(coords, key) {
+  try {
+    await copyCoordsToClipboard(coords[0], coords[1])
+    copiedCoords.value = key
+    clearTimeout(copiedCoordsTimeout)
+    copiedCoordsTimeout = setTimeout(() => { copiedCoords.value = null }, 1500)
+  } catch (err) {
+    console.warn('[ResultsPanel] No se pudo copiar al portapapeles:', err)
+  }
+}
+
 function toggleCollapse() {
   collapsed.value = !collapsed.value
 }
@@ -286,19 +378,17 @@ watch([result, error], () => {
   collapsed.value = false
 })
 
-watch(result, (newRes, oldRes) => {
-  const newId = newRes?.codigo || newRes?.nombre
-  const oldId = oldRes?.codigo || oldRes?.nombre
-  if (newId !== oldId) {
-    abscisaPoints.value = []
-    deletedMeters.value.clear()
-  }
-
+// La lista de abscisas es acumulativa: solo se vacía por acción explícita
+// del usuario (botón de papelera por punto, o cerrar el panel con la X).
+// No se limpia automáticamente al cambiar de vía, consultar una cantera,
+// ni al perder el resultado activo (Esc), para no perder puntos ya agregados.
+watch(result, (newRes) => {
   // Registrar automáticamente en la lista de abscisas cuando el resultado sea un punto en la vía
   if (newRes && newRes.type === 'point' && newRes.snappedCoords) {
-    if (deletedMeters.value.has(newRes.pk)) return
+    const key = pointKey(newRes.codigo, newRes.nombre, newRes.pk)
+    if (deletedKeys.value.has(key)) return
 
-    const yaExiste = abscisaPoints.value.some(p => p.meters === newRes.pk)
+    const yaExiste = abscisaPoints.value.some(p => pointKey(p.roadCode, p.roadName, p.meters) === key)
     if (!yaExiste) {
       abscisaPoints.value.push({
         id: `${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
@@ -319,7 +409,14 @@ function close() {
   pkInput.value = ''
   pkError.value = ''
   abscisaPoints.value = []
-  deletedMeters.value.clear()
+  deletedKeys.value.clear()
+}
+
+function selectAbscisaPoint(p) {
+  queryByPK(p.roadCode, p.roadName, p.meters)
+  nextTick(() => {
+    rpBodyRef.value?.scrollTo({ top: 0, behavior: 'smooth' })
+  })
 }
 
 function zoomPoint(p) {
@@ -330,7 +427,7 @@ function zoomPoint(p) {
 
 function removeAbscisaPoint(p) {
   abscisaPoints.value = abscisaPoints.value.filter(pt => pt.id !== p.id)
-  deletedMeters.value.add(p.meters)
+  deletedKeys.value.add(pointKey(p.roadCode, p.roadName, p.meters))
 }
 
 function isAlreadySaved(p) {
@@ -383,7 +480,8 @@ function goPK() {
   const coords = getPointAtPK(meters, chainedCoords)
   if (!coords) { pkError.value = 'La abscisa excede la longitud de la vía'; return }
 
-  const yaExiste = abscisaPoints.value.some(p => p.meters === meters)
+  const key = pointKey(cod, nom, meters)
+  const yaExiste = abscisaPoints.value.some(p => pointKey(p.roadCode, p.roadName, p.meters) === key)
   if (!yaExiste) {
     abscisaPoints.value.push({
       id: `${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
@@ -639,6 +737,37 @@ function layerLabel(id) {
   color: #606080;
 }
 
+/* Copy coordinates button */
+.copy-coords-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  padding: 7px 10px;
+  margin-top: -6px;
+  border-radius: 6px;
+  border: 1px solid #d8d8e8;
+  background: #fafaff;
+  color: #6060a0;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.copy-coords-btn svg {
+  width: 13px;
+  height: 13px;
+  flex-shrink: 0;
+}
+
+.copy-coords-btn:hover {
+  border-color: #16a34a;
+  color: #16a34a;
+  background: #f0fdf4;
+}
+
 /* Animations */
 .fade-slide-up-enter-active,
 .fade-slide-up-leave-active {
@@ -746,12 +875,17 @@ function layerLabel(id) {
   padding: 8px 10px;
   background: #fafaff;
   gap: 8px;
+  cursor: pointer;
   transition: all 0.15s;
 }
 
 .abs-point-card:hover {
   background: #f5f5fc;
   border-color: #d1d1f0;
+}
+
+.abs-point-card:active {
+  transform: scale(0.98);
 }
 
 .abs-point-info {
@@ -985,4 +1119,30 @@ function layerLabel(id) {
   width: 12px;
   height: 12px;
 }
+.rp-warnings {
+  margin-top: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.rp-warning-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  border-radius: 6px;
+  color: #f59e0b;
+  font-size: 0.85rem;
+  line-height: 1.4;
+}
+.rp-warning-icon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+
 </style>

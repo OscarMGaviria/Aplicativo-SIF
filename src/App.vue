@@ -25,7 +25,6 @@
     </transition>
 
     <WelcomeModal v-if="isReady" />
-    <PhotoModal />
     <AppToolbar />
 
     <div class="workspace">
@@ -55,7 +54,6 @@
 import { computed } from 'vue'
 import { storeToRefs } from 'pinia'
 import WelcomeModal  from './components/WelcomeModal.vue'
-import PhotoModal    from './components/PhotoModal.vue'
 import AppToolbar    from './components/AppToolbar.vue'
 import AppSearchBar  from './components/AppSearchBar.vue'
 import MapCanvas     from './components/MapCanvas.vue'

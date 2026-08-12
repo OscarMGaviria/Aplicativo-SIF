@@ -7,14 +7,9 @@ import { useQueryStore } from '../stores/queryStore'
 import { useCoords } from './useCoords'
 import { useMap } from './useMap'
 import { useQuery } from './useQuery'
+import { escapeXml } from '../utils/formatters'
 
 // ─── KML helpers ─────────────────────────────────────────────────────────────
-
-function escapeXml(str) {
-  return String(str ?? '')
-    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;').replace(/'/g, '&apos;')
-}
 
 function featureToKml(feature) {
   if (!feature.geometry) return ''

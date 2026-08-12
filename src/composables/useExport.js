@@ -4,6 +4,8 @@ import { useExportStore } from '../stores/exportStore'
 import { useCoordStore } from '../stores/coordStore'
 import JSZip from 'jszip'
 import * as turf from '@turf/turf'
+import { escapeXml } from '../utils/formatters'
+import { toMagnaSirgasOrigenNacional } from './useProjection'
 
 const EMPTY_FC = { type: 'FeatureCollection', features: [] }
 
@@ -12,13 +14,6 @@ export function useExport() {
   const layerStore = useLayerStore()
   const exportStore = useExportStore()
   const coordStore = useCoordStore()
-
-  function escapeXml(str) {
-    return String(str ?? '')
-      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;').replace(/'/g, '&apos;')
-  }
-
 
   function initExportLayers() {
     const map = mapStore.instance
@@ -122,20 +117,14 @@ export function useExport() {
         if (geom.type === 'Polygon') {
           for (const ring of geom.coordinates) {
             for (const coord of ring) {
-              const x = (coord[0] * Math.PI) / 180
-              const latRad = (coord[1] * Math.PI) / 180
-              const y = Math.log(Math.tan(Math.PI / 4 + latRad / 2))
-              allPoints.push({ x, y })
+              allPoints.push(toMagnaSirgasOrigenNacional(coord[0], coord[1]))
             }
           }
         } else if (geom.type === 'MultiPolygon') {
           for (const poly of geom.coordinates) {
             for (const ring of poly) {
               for (const coord of ring) {
-                const x = (coord[0] * Math.PI) / 180
-                const latRad = (coord[1] * Math.PI) / 180
-                const y = Math.log(Math.tan(Math.PI / 4 + latRad / 2))
-                allPoints.push({ x, y })
+                allPoints.push(toMagnaSirgasOrigenNacional(coord[0], coord[1]))
               }
             }
           }
@@ -147,10 +136,7 @@ export function useExport() {
     if (allPoints.length === 0) {
       for (const r of roads) {
         for (const coord of r.chainedCoords) {
-          const x = (coord[0] * Math.PI) / 180
-          const latRad = (coord[1] * Math.PI) / 180
-          const y = Math.log(Math.tan(Math.PI / 4 + latRad / 2))
-          allPoints.push({ x, y })
+          allPoints.push(toMagnaSirgasOrigenNacional(coord[0], coord[1]))
         }
       }
     }
@@ -207,9 +193,7 @@ export function useExport() {
 
     // 3. Projection function using adjusted padded coordinates (both X and Y in radians)
     function project(lon, lat) {
-      const x = (lon * Math.PI) / 180
-      const latRad = (lat * Math.PI) / 180
-      const y = Math.log(Math.tan(Math.PI / 4 + latRad / 2))
+      const { x, y } = toMagnaSirgasOrigenNacional(lon, lat)
 
       const svgX = finalDx > 0 ? ((x - padMinX) / finalDx) * width : width / 2
       const svgY = finalDy > 0 ? (1 - (y - padMinY) / finalDy) * height : height / 2
@@ -364,7 +348,8 @@ export function useExport() {
 
   async function exportToKMZ() {
     const roads = exportStore.selectedRoads
-    if (!roads.length) return
+    const points = coordStore.points
+    if (!roads.length && !points.length) return
 
     const groups = {}
     for (const r of roads) {
@@ -422,7 +407,34 @@ export function useExport() {
       kml += `  </Folder>\n`
     }
 
-    // No municipalities folder! Only roads!
+    // Puntos Folder
+    if (points.length) {
+      kml += `  <Folder>\n`
+      kml += `    <name>Puntos</name>\n`
+      for (const p of points) {
+        const name = escapeXml(p.name || 'Punto')
+
+        let descParts = []
+        descParts.push(`Longitud: ${p.lng}`)
+        descParts.push(`Latitud: ${p.lat}`)
+        if (p.nearestRoad) {
+          descParts.push(`Vía cercana: ${p.nearestRoad.codigo || p.nearestRoad.nombre || 'N/A'}`)
+          if (p.nearestRoad.abscisa) descParts.push(`Abscisa: ${p.nearestRoad.abscisa}`)
+        }
+        const desc = escapeXml(descParts.join('\n'))
+
+        kml += `    <Placemark>\n`
+        kml += `      <name>${name}</name>\n`
+        kml += `      <description>${desc}</description>\n`
+        kml += `      <Point>\n`
+        kml += `        <coordinates>${p.lng},${p.lat},0</coordinates>\n`
+        kml += `      </Point>\n`
+        kml += `    </Placemark>\n`
+      }
+      kml += `  </Folder>\n`
+    }
+
+    // No municipalities folder! Only roads and points!
 
     kml += `</Document>\n`
     kml += `</kml>`
